@@ -1,0 +1,44 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% block title %}Lincoln Jr. High Hall Pass{% endblock %}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f8f8;
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: #d32f2f;
+            color: white;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+        }
+        header img {
+            height: 60px;
+            margin-right: 20px;
+        }
+        h1 {
+            margin: 0;
+        }
+        main {
+            padding: 30px;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <img src="{{ url_for('static', filename='lincoln_logo.png') }}" alt="Lincoln Jr. High Logo">
+    <h1>Lincoln Jr. High Hall Pass</h1>
+</header>
+
+<main>
+    {% block content %}{% endblock %}
+</main>
+
+</body>
+</html>

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Student Pass Counts{% endblock %}
+
+{% block content %}
+    <h2>Student Usage List – {{ current_quarter }}</h2>
+
+    <ul>
+        {% for name, count in counts.items() %}
+            <li>{{ name }} – {{ count }} / 18</li>
+        {% endfor %}
+    </ul>
+
+    <p><a href="{{ url_for('dashboard') }}">⬅ Back to Dashboard</a></p>
+{% endblock %}

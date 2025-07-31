@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sign Out Form</title>
+</head>
+<body>
+    <h1>Sign Out Form</h1>
+    
+    {% if hallway_full %}
+        <p>🚫 The hallway is full. Please wait until someone signs in before you go.</p>
+        <a href="{{ url_for('index') }}">⬅ Back to Home</a>
+    {% else %}
+        <form method="post" action="{{ url_for('sign_out') }}">
+            <label for="last_name">Last Name:</label>
+            <input type="text" id="last_name" name="last_name" required><br><br>
+
+            <label for="first_name">First Name:</label>
+            <input type="text" id="first_name" name="first_name" required><br><br>
+
+            <label for="period">Period:</label>
+            <select id="period" name="period" required>
+                <option value="">--Select Period--</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+            </select><br><br>
+
+            <label for="teacher">Teacher:</label>
+            <select id="teacher" name="teacher" required>
+                <option value="">--Select Teacher--</option>
+                <option value="Mr. Smith">Mr. Smith</option>
+                <option value="Ms. Johnson">Ms. Johnson</option>
+                <option value="Mrs. Lee">Mrs. Lee</option>
+                <!-- Add your teacher names here -->
+            </select><br><br>
+
+            <label for="reason">Reason:</label>
+            <select id="reason" name="reason" required>
+                <option value="">--Select Reason--</option>
+                <option value="Bathroom">Bathroom</option>
+                <option value="Nurse">Nurse</option>
+                <option value="Counselor">Counselor</option>
+                <option value="Other">Other</option>
+            </select><br><br>
+
+            <button type="submit">Sign Out</button>
+        </form>
+        <br>
+        <a href="{{ url_for('index') }}">⬅ Back to Home</a>
+    {% endif %}
+</body>
+</html>
+
