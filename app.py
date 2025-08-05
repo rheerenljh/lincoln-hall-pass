@@ -10,7 +10,7 @@ app.secret_key = 'lincoln20252026'
 
 # ---------- CONFIG ----------
 CSV_FILE = 'hall_passes.csv'
-HALL_LIMIT = 5
+HALL_LIMIT = 10
 MAX_QUARTER_PASSES = 18
 PASSWORD = 'lincoln20252026'
 
