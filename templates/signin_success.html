@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sign In Successful</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 50px;
+        }
+        h1 {
+            color: green;
+        }
+        .btn {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #c8102e; /* Lincoln red */
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .btn:hover {
+            background-color: #a10b22;
+        }
+    </style>
+</head>
+<body>
+    <h1>✅ Sign in successful!</h1>
+    <p>{{ first_name }} {{ last_name }}, you have used 
+       <strong>{{ used_passes }}</strong> out of 18 passes this quarter.</p>
+    <a href="{{ url_for('home', name=first_name + ' ' + last_name) }}" class="btn">
+        Back to Hall Pass Site
+    </a>
+</body>
+</html>

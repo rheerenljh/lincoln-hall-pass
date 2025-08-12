@@ -1,24 +1,35 @@
+import os
+import json
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from flask import Flask, render_template, request, redirect, session, url_for
 from datetime import datetime, date
-import os
-import json
 
 app = Flask(__name__)
-app.secret_key = 'lincoln20252026'
 
+# ---------- SECRETS & CONFIG (env-first) ----------
+# Set these in Render → Environment
 # ---------- CONFIG ----------
-HALL_LIMIT = 10
-MAX_QUARTER_PASSES = 18
-PASSWORD = 'lincoln20252026'
+app.secret_key = os.environ.get("SECRET_KEY", "dev-only-override")  # dev fallback
+PASSWORD = os.environ.get("TEACHER_DASHBOARD_PASSWORD", "dev-password")  # dev fallback
+
+HALL_LIMIT = int(os.environ.get("HALL_LIMIT", 10))
+MAX_QUARTER_PASSES = int(os.environ.get("MAX_QUARTER_PASSES", 18))
 
 # ---------- GOOGLE SHEETS ----------
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-google_creds = json.loads(os.environ["GOOGLE_CREDS_JSON"])
+
+if os.environ.get("GOOGLE_CREDS_JSON"):
+    # Load from environment variable (Render deployment)
+    google_creds = json.loads(os.environ["GOOGLE_CREDS_JSON"])
+else:
+    # Local development - load from file
+    with open("service_account.json") as f:
+        google_creds = json.load(f)
+
 creds = ServiceAccountCredentials.from_json_keyfile_dict(google_creds, scope)
 client = gspread.authorize(creds)
-SHEET_NAME = "HallPassTracker"
+SHEET_NAME = os.environ.get("SHEET_NAME", "HallPassTracker")
 sheet = client.open(SHEET_NAME).sheet1
 
 # ---------- CHOICES ----------
@@ -133,35 +144,59 @@ def signout():
     write_pass(entry)
     return redirect(url_for('home', name=f"{first_name} {last_name}"))
 
-@app.route('/signin', methods=['POST'])
+from datetime import datetime
+from flask import request, redirect, url_for
+
+@app.route("/signin", methods=["POST"])
 def signin():
-    full_name = request.form['name'].strip()
+    # Accept either "full_name" or "name" from the form
+    full_name = (request.form.get("full_name") or request.form.get("name") or "").strip()
+    # Normalize weird spacing: "  Mary   Ann  Smith  " -> "Mary Ann Smith"
+    full_name = " ".join(full_name.split())
+
+    if not full_name or " " not in full_name:
+        return "First and last name are required", 400
+
+    # Support multi-part last names (everything after first token)
+    parts = full_name.split(" ")
+    first_name = parts[0]
+    last_name = " ".join(parts[1:])
+
+    # Pull rows and header row from Google Sheets
+    records = sheet.get_all_records()
+    headers = sheet.row_values(1)
     try:
-        first, last = full_name.split(' ', 1)
-    except ValueError:
-        return render_template("error.html", message="Please enter your full name as 'First Last'.")
+        time_in_col = headers.index("Time In") + 1
+    except ValueError as e:
+        return f"Missing expected column: {e}", 500
 
-    passes = read_passes()
-    updated = False
-    for i in range(len(passes) - 1, -1, -1):
-        row = passes[i]
-        if (row.get('First Name', '').strip().lower() == first.lower() and
-            row.get('Last Name', '').strip().lower() == last.lower() and
-            row.get('Time In', '').strip() == ''):
-            row['Time In'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            updated = True
-            break
+    target_first = first_name.strip().lower()
+    target_last  = last_name.strip().lower()
 
-    if updated:
-        sheet.clear()
-        headers = ['First Name', 'Last Name', 'Period', 'Teacher', 'Reason', 'Time Out', 'Time In']
-        sheet.append_row(headers)
-        for row in passes:
-            sheet.append_row([row.get(h, '') for h in headers])
-        return redirect(url_for('home', name=f"{first} {last}"))
-    else:
-        return render_template("error.html", message="No active pass found. Did you sign out first?")
+    # Find an active pass (Time In still blank-ish)
+    for idx, row in enumerate(records, start=2):  # data starts on row 2
+        row_first = str(row.get("First Name", "")).strip().lower()
+        row_last  = str(row.get("Last Name", "")).strip().lower()
+        time_in_val = str(row.get("Time In", "")).strip()
 
+        # Treat "", "None", "nan" (and formula-blank that comes back as "") as empty
+        is_time_in_empty = (time_in_val == "" or time_in_val.lower() in ("none", "nan"))
+
+        if row_first == target_first and row_last == target_last and is_time_in_empty:
+            # Update Time In
+            sheet.update_cell(idx, time_in_col, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            # Compute updated passes used this quarter
+            used_passes = passes_this_quarter(first_name, last_name)
+            # Show confirmation page
+            return render_template(
+                "signin_success.html",
+                first_name=first_name,
+                last_name=last_name,
+                used_passes=used_passes
+            )
+
+    return "Student not found or already signed in", 404
+    
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
