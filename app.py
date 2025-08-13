@@ -1,34 +1,38 @@
 import os
 import json
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 from flask import Flask, render_template, request, redirect, session, url_for
 from datetime import datetime, date
 
 app = Flask(__name__)
 
 # ---------- SECRETS & CONFIG (env-first) ----------
-# Set these in Render → Environment
-# ---------- CONFIG ----------
 app.secret_key = os.environ.get("SECRET_KEY", "dev-only-override")  # dev fallback
 PASSWORD = os.environ.get("TEACHER_DASHBOARD_PASSWORD", "dev-password")  # dev fallback
 
 HALL_LIMIT = int(os.environ.get("HALL_LIMIT", 10))
 MAX_QUARTER_PASSES = int(os.environ.get("MAX_QUARTER_PASSES", 18))
 
-# ---------- GOOGLE SHEETS ----------
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-
-if os.environ.get("GOOGLE_CREDS_JSON"):
-    # Load from environment variable (Render deployment)
-    google_creds = json.loads(os.environ["GOOGLE_CREDS_JSON"])
+# ---------- GOOGLE SHEETS (env-first creds, modern gspread auth) ----------
+google_creds_json = os.environ.get("GOOGLE_CREDS_JSON")
+if google_creds_json:
+    try:
+        google_creds = json.loads(google_creds_json)
+    except json.JSONDecodeError as e:
+        raise RuntimeError("GOOGLE_CREDS_JSON is set but contains invalid JSON.") from e
 else:
-    # Local development - load from file
-    with open("service_account.json") as f:
-        google_creds = json.load(f)
+    # Local development - load from file (keep out of git via .gitignore)
+    try:
+        with open("service_account.json") as f:
+            google_creds = json.load(f)
+    except FileNotFoundError as e:
+        raise RuntimeError(
+            "No GOOGLE_CREDS_JSON env var and service_account.json not found. "
+            "Set GOOGLE_CREDS_JSON in Render (paste full JSON) or add service_account.json locally."
+        ) from e
 
-creds = ServiceAccountCredentials.from_json_keyfile_dict(google_creds, scope)
-client = gspread.authorize(creds)
+# Modern auth (no oauth2client needed)
+client = gspread.service_account_from_dict(google_creds)
 SHEET_NAME = os.environ.get("SHEET_NAME", "HallPassTracker")
 sheet = client.open(SHEET_NAME).sheet1
 
@@ -40,9 +44,7 @@ TEACHERS = [
     "C. Hughes", "J. Jimenez", "J. Kallenberg", "B. Langowski", "G. Miller", "A. Schmeltz",
     "P. Skirvin", "A. Smith", "B. Stiles", "G. Stout", "J. Taylor", "S. Taylor", "S. Vanlue"
 ]
-
 REASONS = ["Restroom", "Water", "Office", "Locker", "Nurse", "Other"]
-
 PERIODS = ["Advisory/STORM", "Period 2", "Period 3", "Period 4", "Period 5", "Period 6", "Period 7"]
 
 # ---------- HELPERS ----------
@@ -144,20 +146,15 @@ def signout():
     write_pass(entry)
     return redirect(url_for('home', name=f"{first_name} {last_name}"))
 
-from datetime import datetime
-from flask import request, redirect, url_for
-
 @app.route("/signin", methods=["POST"])
 def signin():
     # Accept either "full_name" or "name" from the form
     full_name = (request.form.get("full_name") or request.form.get("name") or "").strip()
-    # Normalize weird spacing: "  Mary   Ann  Smith  " -> "Mary Ann Smith"
-    full_name = " ".join(full_name.split())
+    full_name = " ".join(full_name.split())  # normalize extra spaces
 
     if not full_name or " " not in full_name:
         return "First and last name are required", 400
 
-    # Support multi-part last names (everything after first token)
     parts = full_name.split(" ")
     first_name = parts[0]
     last_name = " ".join(parts[1:])
@@ -179,7 +176,6 @@ def signin():
         row_last  = str(row.get("Last Name", "")).strip().lower()
         time_in_val = str(row.get("Time In", "")).strip()
 
-        # Treat "", "None", "nan" (and formula-blank that comes back as "") as empty
         is_time_in_empty = (time_in_val == "" or time_in_val.lower() in ("none", "nan"))
 
         if row_first == target_first and row_last == target_last and is_time_in_empty:
@@ -196,7 +192,7 @@ def signin():
             )
 
     return "Student not found or already signed in", 404
-    
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -236,6 +232,19 @@ def get_pass_counts():
         name = f"{entry['First Name']} {entry['Last Name']}".strip()
         counts[name] = counts.get(name, 0) + 1
     return counts
+
+# ---- Optional health/diagnostic endpoints (handy on Render) ----
+@app.route("/healthz")
+def healthz():
+    return "ok", 200
+
+@app.route("/diag")
+def diag():
+    try:
+        title = client.open(SHEET_NAME).title
+        return f"Sheets OK. Opened: {title}", 200
+    except Exception as e:
+        return f"Sheets error: {type(e).__name__}: {e}", 500
 
 # ---------- RUN ----------
 if __name__ == '__main__':
