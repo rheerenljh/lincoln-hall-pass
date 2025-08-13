@@ -4,6 +4,12 @@ import gspread
 from flask import Flask, render_template, request, redirect, session, url_for
 from datetime import datetime, date
 
+# ▶️ Add these three lines:
+from zoneinfo import ZoneInfo
+LOCAL_TZ = ZoneInfo("America/Indiana/Indianapolis")
+def now_str():
+    return datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+
 app = Flask(__name__)
 
 # ---------- SECRETS & CONFIG (env-first) ----------
@@ -125,7 +131,7 @@ def signout():
     reason = request.form['reason']
     other_reason = request.form.get('other_reason', '').strip()
     final_reason = other_reason if reason == "Other" and other_reason else reason
-    time_out = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    time_out = now_str()
 
     passes = read_passes()
     currently_out = [p for p in passes if not p['Time In'].strip()]
@@ -180,7 +186,7 @@ def signin():
 
         if row_first == target_first and row_last == target_last and is_time_in_empty:
             # Update Time In
-            sheet.update_cell(idx, time_in_col, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            sheet.update_cell(idx, time_in_col, now_str())
             # Compute updated passes used this quarter
             used_passes = passes_this_quarter(first_name, last_name)
             # Show confirmation page
