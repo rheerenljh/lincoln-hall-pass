@@ -13,9 +13,10 @@
   {% endfor %}
 </ul>
 
-<h2>View All Pass Counts (Top 50)</h2>
+<h2>Top 50 Pass Counts</h2>
 <ul>
-  {% for student, count in counts.items() | sort(attribute=1, reverse=true) | slice(0, 50) %}
+  {# Sort by count descending and limit to 50 #}
+  {% for student, count in (counts.items() | sort(attribute=1, reverse=true))[:50] %}
     <li>{{ loop.index }}. {{ student }} — {{ count }}</li>
   {% endfor %}
 </ul>
