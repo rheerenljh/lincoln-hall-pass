@@ -2,25 +2,28 @@
 {% block title %}Teacher Dashboard{% endblock %}
 
 {% block content %}
-    <h2>Teacher Dashboard</h2>
+<h1>Teacher Dashboard</h1>
 
-    <h3>Students Currently Out</h3>
-    <ul>
-        {% for pass in passes %}
-            {% if pass['Time In'] == '' %}
-                <li>{{ pass['First Name'] }} {{ pass['Last Name'] }} – Out at {{ pass['Time Out'] }}</li>
-            {% endif %}
-        {% endfor %}
-    </ul>
+<h2>Students Currently Out</h2>
+<ul>
+  {% for pass in passes %}
+    {% if pass['Time In'] == '' %}
+      <li>{{ pass['First Name'] }} {{ pass['Last Name'] }} — Out at {{ pass['Time Out'] }}</li>
+    {% endif %}
+  {% endfor %}
+</ul>
 
-    <p><a href="{{ url_for('student_list') }}">View All Pass Counts</a></p>
+<h2>View All Pass Counts</h2>
+<ul>
+  {# Sort by count (the value in the (student, count) pair), descending #}
+  {% for student, count in counts.items() | sort(attribute=1, reverse=true) %}
+    <li>{{ loop.index }}. {{ student }} — {{ count }}</li>
+  {% endfor %}
+</ul>
 
-    <p>
-        <a href="https://docs.google.com/spreadsheets/d/13XRSp2BtNTKYNAO7w8sV6Ml_PmSFVfxyVPnVIz4zzoc/edit?usp=sharing" target="_blank">
-            📄 Open Google Sheet – HallPassTracker
-        </a>
-    </p>
+<p>
+  <a href="https://docs.google.com/spreadsheets/d/…YOUR_SHEET_ID…" target="_blank" rel="noopener">📄 Open Google Sheet — HallPassTracker</a>
+</p>
 
-    <p><a href="{{ url_for('logout') }}">Logout</a></p>
+<p><a href="{{ url_for('logout') }}">Logout</a></p>
 {% endblock %}
-

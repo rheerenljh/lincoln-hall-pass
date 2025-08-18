@@ -2,7 +2,7 @@ import os
 import json
 import gspread
 from flask import Flask, render_template, request, redirect, session, url_for
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 # ▶️ Add these three lines:
 from zoneinfo import ZoneInfo
@@ -107,9 +107,56 @@ def passes_this_quarter(first, last):
                 continue
     return count
 
+def auto_close_stale_passes(max_minutes: int = 30) -> int:
+    """
+    Auto-sign students back in if they've been out longer than max_minutes.
+    Returns how many rows were auto-closed.
+    """
+    try:
+        rows = sheet.get_all_values()
+        if not rows:
+            return 0
+
+        headers = rows[0]
+        # Find the columns we need
+        try:
+            timeout_idx = headers.index("Time Out")
+            timein_idx  = headers.index("Time In")
+        except ValueError:
+            # Headers missing; nothing to do
+            return 0
+
+        closed = 0
+        # Start at row 2 (sheet row numbers are 1-based; row 1 = headers)
+        for r, row in enumerate(rows[1:], start=2):
+            time_out = (row[timeout_idx] or "").strip()
+            time_in  = (row[timein_idx]  or "").strip()
+
+            # Only consider rows that have Time Out and empty Time In
+            if time_out and time_in == "":
+                # Parse "YYYY-MM-DD HH:MM:SS" written by now_str()
+                try:
+                    out_dt = datetime.strptime(time_out, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    # Skip rows with unexpected formats
+                    continue
+
+                # Compare using local time (you already have LOCAL_TZ and now_str())
+                now_naive = datetime.now(LOCAL_TZ).replace(tzinfo=None)
+                if now_naive - out_dt > timedelta(minutes=max_minutes):
+                    sheet.update_cell(r, timein_idx + 1, now_str())
+                    closed += 1
+
+        return closed
+    except Exception as e:
+        # Don't crash the request if Sheets is flaky—just log and continue
+        print(f"auto_close_stale_passes error: {e}")
+        return 0
+
 # ---------- ROUTES ----------
 @app.route('/')
 def home():
+    auto_close_stale_passes()  # 👈 add this
     name = request.args.get('name')
     used_passes = None
     if name:
@@ -212,6 +259,7 @@ def login():
 def dashboard():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
+    auto_close_stale_passes()  # 👈 add this
     passes = read_passes()
     counts = get_pass_counts()
     currently_out = [p for p in passes if not p['Time In'].strip()]
@@ -221,6 +269,7 @@ def dashboard():
 def student_list():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
+    auto_close_stale_passes()  # 👈 add this
     passes = read_passes()
     counts = get_pass_counts()
     current_quarter = get_current_quarter()
