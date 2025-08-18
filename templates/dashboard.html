@@ -13,16 +13,17 @@
   {% endfor %}
 </ul>
 
-<h2>View All Pass Counts</h2>
+<h2>View All Pass Counts (Top 50)</h2>
 <ul>
-  {# Sort by count (the value in the (student, count) pair), descending #}
-  {% for student, count in counts.items() | sort(attribute=1, reverse=true) %}
+  {% for student, count in counts.items() | sort(attribute=1, reverse=true) | slice(0, 50) %}
     <li>{{ loop.index }}. {{ student }} — {{ count }}</li>
   {% endfor %}
 </ul>
 
 <p>
-  <a href="https://docs.google.com/spreadsheets/d/…YOUR_SHEET_ID…" target="_blank" rel="noopener">📄 Open Google Sheet — HallPassTracker</a>
+  <a href="https://docs.google.com/spreadsheets/d/13XRSp2BtNTKYNAO7w8sV6Ml_PmSFVfxyVPnVIz4zzoc/edit?gid=0#gid=0" target="_blank" rel="noopener">
+    📄 Open Google Sheet — HallPassTracker
+  </a>
 </p>
 
 <p><a href="{{ url_for('logout') }}">Logout</a></p>
