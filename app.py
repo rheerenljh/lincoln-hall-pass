@@ -277,7 +277,13 @@ def dashboard():
     auto_close_stale_passes()
     passes = read_passes()
     counts = get_pass_counts()
-    currently_out = [p for p in passes if not p.get('Time In','').strip()]
+    currently_out = []
+for p in passes:
+    if not isinstance(p, dict):
+        continue
+    tin = str(p.get('Time In', '') or '').strip().lower()
+    if tin in ('', 'none', 'nan'):
+        currently_out.append(p)
     return render_template('dashboard.html', passes=currently_out, counts=counts)
 
 @app.route('/student_list')
@@ -299,9 +305,14 @@ def get_pass_counts():
     passes = read_passes()
     counts = {}
     for entry in passes:
-        name = f"{entry.get('First Name','').strip()} {entry.get('Last Name','').strip()}".strip()
-        if not name:
+        if not isinstance(entry, dict):
             continue
+        # Coerce to string and handle None/NaN/float etc.
+        first = str(entry.get('First Name', '') or '').strip()
+        last  = str(entry.get('Last Name', '') or '').strip()
+        if not first and not last:
+            continue
+        name = f"{first} {last}".strip()
         counts[name] = counts.get(name, 0) + 1
     return counts
 
