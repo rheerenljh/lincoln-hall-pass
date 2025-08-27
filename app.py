@@ -135,7 +135,7 @@ def auto_close_stale_passes(max_minutes: int = 30) -> int:
         print(f"auto_close_stale_passes error: {e}")
         return 0
     
-    @app.route('/')
+@app.route('/')
 def home():
     # Optionally auto-close long-out passes when the homepage is hit
     auto_close_stale_passes()
