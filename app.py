@@ -188,6 +188,13 @@ def auto_close_stale_passes(max_minutes: int = 30) -> int:
         print(f"auto_close_stale_passes error: {e}")
         return 0
 
+def _s(v):
+    """Coerce any value (None, float, etc.) to a safe trimmed string."""
+    try:
+        return str(v or "").strip()
+    except Exception:
+        return ""
+
 # ---- ROUTES ----
 @app.route("/", methods=["GET"])
 def home():
@@ -277,12 +284,12 @@ def dashboard():
     auto_close_stale_passes()
     passes = read_passes()
     counts = get_pass_counts()
-    currently_out = []
+currently_out = []
 for p in passes:
     if not isinstance(p, dict):
         continue
-    tin = str(p.get('Time In', '') or '').strip().lower()
-    if tin in ('', 'none', 'nan'):
+    tin = _s(p.get('Time In')).lower()
+    if tin in ("", "none", "nan"):
         currently_out.append(p)
     return render_template('dashboard.html', passes=currently_out, counts=counts)
 
@@ -305,14 +312,11 @@ def get_pass_counts():
     passes = read_passes()
     counts = {}
     for entry in passes:
-        if not isinstance(entry, dict):
-            continue
-        # Coerce to string and handle None/NaN/float etc.
-        first = str(entry.get('First Name', '') or '').strip()
-        last  = str(entry.get('Last Name', '') or '').strip()
-        if not first and not last:
-            continue
+        first = safe_str(entry.get("First Name", ""))
+        last  = safe_str(entry.get("Last Name", ""))
         name = f"{first} {last}".strip()
+        if not name:
+            continue  # skip rows without names
         counts[name] = counts.get(name, 0) + 1
     return counts
 
