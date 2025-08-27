@@ -54,9 +54,40 @@ REASONS = ["Restroom", "Water", "Office", "Locker", "Nurse", "Other"]
 PERIODS = ["Advisory/STORM", "Period 2", "Period 3", "Period 4", "Period 5", "Period 6", "Period 7"]
 
 # ---------- HELPERS ----------
+# ---------- SHEET HEADER HARDENING ----------
+EXPECTED_HEADERS = [
+    "First Name", "Last Name", "Period", "Teacher",
+    "Reason", "Time Out", "Time In"
+]
+
 def read_passes():
-    records = sheet.get_all_records()
-    return [row for row in records if any(row.values())]
+    """
+    Read rows using a fixed header schema so duplicate/blank headers in the
+    sheet don't crash the app.
+    """
+    return sheet.get_all_records(
+        expected_headers=EXPECTED_HEADERS,  # <- ignore weird row 1
+        head=1,
+        default_blank=""
+    )
+
+def _header_index(col_name: str) -> int:
+    """
+    Return 1-based column index for the given header name.
+    Tries live row 1 first (trimmed, case-insensitive), then falls back
+    to the EXPECTED_HEADERS order.
+    """
+    try:
+        row1 = sheet.row_values(1)
+    except Exception:
+        row1 = []
+
+    norm = [ (h or "").strip().lower() for h in row1 ]
+    try:
+        return norm.index(col_name.strip().lower()) + 1
+    except ValueError:
+        # Fallback to the expected schema order
+        return EXPECTED_HEADERS.index(col_name) + 1
 
 def write_pass(entry):
     sheet.append_row([
@@ -154,21 +185,48 @@ def auto_close_stale_passes(max_minutes: int = 30) -> int:
         return 0
 
 # ---------- ROUTES ----------
-@app.route('/')
-def home():
-    auto_close_stale_passes()  # 👈 add this
-    name = request.args.get('name')
-    used_passes = None
-    if name:
-        try:
-            first, last = name.strip().split(' ', 1)
-            used_passes = passes_this_quarter(first, last)
-            name = f"{first} {last}"
-        except ValueError:
-            name = None
-    return render_template('index.html', name=name, used_passes=used_passes,
-                           teachers=TEACHERS, reasons=REASONS, periods=PERIODS)
+def auto_close_stale_passes(max_minutes: int = 30) -> int:
+    """
+    Auto-sign students back in if they've been out longer than max_minutes.
+    Returns how many rows were auto-closed.
+    """
+    try:
+        rows = sheet.get_all_values()
+        if not rows:
+            return 0
 
+        # Robust column indexes
+        timeout_idx = _header_index("Time Out") - 1  # convert to 0-based for list access
+        timein_idx  = _header_index("Time In") - 1
+
+        closed = 0
+        # Start at row 2 (sheet row numbers are 1-based; row 1 = headers)
+        for r, row in enumerate(rows[1:], start=2):
+            # Pad short rows safely
+            if len(row) <= max(timeout_idx, timein_idx):
+                continue
+
+            time_out = (row[timeout_idx] or "").strip()
+            time_in  = (row[timein_idx]  or "").strip()
+
+            # Only consider rows that have Time Out and empty Time In
+            if time_out and time_in == "":
+                try:
+                    out_dt = datetime.strptime(time_out, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    # Skip rows with unexpected formats
+                    continue
+
+                now_naive = datetime.now(LOCAL_TZ).replace(tzinfo=None)
+                if now_naive - out_dt > timedelta(minutes=max_minutes):
+                    sheet.update_cell(r, timein_idx + 1, now_str())
+                    closed += 1
+
+        return closed
+    except Exception as e:
+        print(f"auto_close_stale_passes error: {e}")
+        return 0
+    
 @app.route('/signout', methods=['POST'])
 def signout():
     first_name = request.form['first_name']
@@ -212,13 +270,11 @@ def signin():
     first_name = parts[0]
     last_name = " ".join(parts[1:])
 
-    # Pull rows and header row from Google Sheets
-    records = sheet.get_all_records()
-    headers = sheet.row_values(1)
-    try:
-        time_in_col = headers.index("Time In") + 1
-    except ValueError as e:
-        return f"Missing expected column: {e}", 500
+    # Hardened read (ignores broken/blank headers in the sheet)
+    records = read_passes()
+
+    # Robust column lookup for updates
+    time_in_col = _header_index("Time In")
 
     target_first = first_name.strip().lower()
     target_last  = last_name.strip().lower()
