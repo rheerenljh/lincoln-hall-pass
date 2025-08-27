@@ -107,7 +107,6 @@ def passes_this_quarter(first, last):
                 continue
     return count
 
-# ✅ Keep only this hardened version (remove any earlier duplicate)
 def auto_close_stale_passes(max_minutes: int = 30) -> int:
     try:
         rows = sheet.get_all_values()
@@ -134,47 +133,27 @@ def auto_close_stale_passes(max_minutes: int = 30) -> int:
     except Exception as e:
         print(f"auto_close_stale_passes error: {e}")
         return 0
-    
-@app.route('/')
-def home():
-    # Optionally auto-close long-out passes when the homepage is hit
-    auto_close_stale_passes()
-
-    name = request.args.get('name')
-    used_passes = None
-    if name:
-        try:
-            first, last = name.strip().split(' ', 1)
-            used_passes = passes_this_quarter(first, last)
-            name = f"{first} {last}"
-        except ValueError:
-            name = None
-
-    return render_template(
-        'index.html',
-        name=name,
-        used_passes=used_passes,
-        teachers=TEACHERS,
-        reasons=REASONS,
-        periods=PERIODS
-    )
 
 # ---- ROUTES ----
 @app.route("/", methods=["GET"])
 def home():
-    auto_close_stale_passes()
-    name = request.args.get('name')
+    auto_close_stale_passes()  # keep this if you want auto-close behavior on page load
+    name = (request.args.get("name") or "").strip()
     used_passes = None
-    if name:
-        try:
-            first, last = name.strip().split(' ', 1)
-            used_passes = passes_this_quarter(first, last)
-            name = f"{first} {last}"
-        except ValueError:
-            name = None
-    return render_template("index.html",
-                           name=name, used_passes=used_passes,
-                           teachers=TEACHERS, reasons=REASONS, periods=PERIODS)
+    if name and " " in name:
+        first, last = name.split(" ", 1)
+        used_passes = passes_this_quarter(first, last)
+        name = f"{first} {last}"
+    else:
+        name = None
+    return render_template(
+        "index.html",
+        name=name,
+        used_passes=used_passes,
+        teachers=TEACHERS,
+        reasons=REASONS,
+        periods=PERIODS,
+    )
 
 @app.route('/signout', methods=['POST'])
 def signout():
