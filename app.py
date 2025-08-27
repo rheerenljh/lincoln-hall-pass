@@ -43,9 +43,44 @@ PERIODS = ["Advisory/STORM","Period 2","Period 3","Period 4","Period 5","Period 
 
 # ---- Header hardening ----
 EXPECTED_HEADERS = ["First Name","Last Name","Period","Teacher","Reason","Time Out","Time In"]
-
 def read_passes():
-    return sheet.get_all_records(expected_headers=EXPECTED_HEADERS, head=1, default_blank="")
+    """
+    Read rows using a fixed header schema and coerce any odd rows into dicts.
+    This survives duplicate/blank headers and short rows.
+    """
+    try:
+        # Preferred: dicts with our expected schema regardless of the real header row
+        recs = sheet.get_all_records(
+            expected_headers=EXPECTED_HEADERS,
+            head=1,
+            default_blank=""
+        )
+        # Safety: ensure each item is a dict (coerce lists if Google returns values)
+        fixed = []
+        for r in recs:
+            if isinstance(r, dict):
+                fixed.append(r)
+            elif isinstance(r, list):
+                fixed.append({
+                    h: (r[i] if i < len(r) else "")
+                    for i, h in enumerate(EXPECTED_HEADERS)
+                })
+            else:
+                # unknown type -> skip
+                continue
+        return fixed
+    except Exception:
+        # Absolute fallback: work from raw values
+        rows = sheet.get_all_values()
+        if not rows:
+            return []
+        fixed = []
+        for row in rows[1:]:
+            fixed.append({
+                h: (row[i] if i < len(row) else "")
+                for i, h in enumerate(EXPECTED_HEADERS)
+            })
+        return fixed
 
 def _header_index(col_name: str) -> int:
     try:
@@ -82,29 +117,48 @@ def get_current_quarter():
 def passes_this_quarter(first, last):
     passes = read_passes()
     quarter = get_current_quarter()
-    # compute current quarter window again
-    today = date.today(); year = today.year
+    count = 0
+
+    today = date.today()
+    year = today.year
     quarters = {
-        "Q1": (date(year, 7, 1), date(year,10,31)),
-        "Q2": (date(year,11, 1), date(year+1,1,15)),
-        "Q3": (date(year, 1,16), date(year, 3,31)),
-        "Q4": (date(year, 4, 1), date(year, 6,30)),
+        "Q1": (date(year, 7, 1), date(year, 10, 31)),
+        "Q2": (date(year, 11, 1), date(year + 1, 1, 15)),
+        "Q3": (date(year, 1, 16), date(year, 3, 31)),
+        "Q4": (date(year, 4, 1), date(year, 6, 30)),
     }
     start, end = quarters.get(quarter, (None, None))
-    count = 0
+
+    first_lc = first.strip().lower()
+    last_lc  = last.strip().lower()
+
     for row in passes:
-        fn = row.get('First Name', '').strip().lower()
-        ln = row.get('Last Name', '').strip().lower()
-        if fn == first.strip().lower() and ln == last.strip().lower():
-            ts = row.get('Time Out', '').strip()
-            if not ts:
-                continue
-            try:
-                d = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").date()
-                if start and end and (start <= d <= end or (start > end and (d >= start or d <= end))):
-                    count += 1
-            except:
-                continue
+        # Coerce any non-dict rows just in case
+        if isinstance(row, list):
+            row = {EXPECTED_HEADERS[i]: (row[i] if i < len(row) else "")
+                   for i in range(len(EXPECTED_HEADERS))}
+        if not isinstance(row, dict):
+            continue
+
+        fn = str(row.get('First Name', '')).strip().lower()
+        ln = str(row.get('Last Name', '')).strip().lower()
+        if fn != first_lc or ln != last_lc:
+            continue
+
+        time_out_str = str(row.get('Time Out', '')).strip()
+        if not time_out_str:
+            continue
+        try:
+            time_out = datetime.strptime(time_out_str, "%Y-%m-%d %H:%M:%S").date()
+        except ValueError:
+            # Skip rows with unexpected date formats
+            continue
+
+        # Handle Q2 spanning New Year
+        if start and end and (start <= end and start <= time_out <= end or
+                              start and end and start > end and (time_out >= start or time_out <= end)):
+            count += 1
+
     return count
 
 def auto_close_stale_passes(max_minutes: int = 30) -> int:
