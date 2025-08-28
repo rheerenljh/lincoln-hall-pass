@@ -10,6 +10,13 @@ LOCAL_TZ = ZoneInfo("America/Indiana/Indianapolis")
 def now_str():
     return datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
+def safe_str(v):
+    """Coerce any value (None, float, etc.) to a safe trimmed string."""
+    try:
+        return str(v or "").strip()
+    except Exception:
+        return ""
+
 app = Flask(__name__)
 
 # ---------- SECRETS & CONFIG (env-first) ----------
@@ -92,19 +99,25 @@ def passes_this_quarter(first, last):
         "Q4": (date(year, 4, 1), date(year, 6, 30)),
     }
     start, end = quarters.get(quarter, (None, None))
+
     for row in passes:
-        fn = row.get('First Name', '').strip().lower()
-        ln = row.get('Last Name', '').strip().lower()
-        if fn == first.strip().lower() and ln == last.strip().lower():
-            time_out_str = row.get('Time Out', '').strip()
+        fn = safe_str(row.get('First Name')).lower()
+        ln = safe_str(row.get('Last Name')).lower()
+        if fn == safe_str(first).lower() and ln == safe_str(last).lower():
+            time_out_str = safe_str(row.get('Time Out'))
             if not time_out_str:
                 continue
             try:
                 time_out = datetime.strptime(time_out_str, "%Y-%m-%d %H:%M:%S").date()
-                if start <= time_out <= end or (start > end and (time_out >= start or time_out <= end)):
-                    count += 1
-            except Exception:
+            except ValueError:
                 continue
+
+            if start and end and (
+                (start <= end and start <= time_out <= end) or
+                (start > end and (time_out >= start or time_out <= end))
+            ):
+                count += 1
+
     return count
 
 def auto_close_stale_passes(max_minutes: int = 30) -> int:
@@ -181,7 +194,7 @@ def signout():
     time_out = now_str()
 
     passes = read_passes()
-    currently_out = [p for p in passes if not p['Time In'].strip()]
+    currently_out = [p for p in passes if not safe_str(p.get('Time In'))]
     if len(currently_out) >= HALL_LIMIT:
         return render_template("error.html", message="The maximum number of students are already out. Please wait.")
     if passes_this_quarter(first_name, last_name) >= MAX_QUARTER_PASSES:
@@ -284,7 +297,11 @@ def get_pass_counts():
     passes = read_passes()
     counts = {}
     for entry in passes:
-        name = f"{entry['First Name']} {entry['Last Name']}".strip()
+        first = safe_str(entry.get("First Name"))
+        last  = safe_str(entry.get("Last Name"))
+        name = f"{first} {last}".strip()
+        if not name:
+            continue  # skip rows without names
         counts[name] = counts.get(name, 0) + 1
     return counts
 
