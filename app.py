@@ -5,94 +5,58 @@ from flask import Flask, render_template, request, redirect, session, url_for
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 
-# ---- Time helpers ----
+# ▶️ Add these three lines:
 LOCAL_TZ = ZoneInfo("America/Indiana/Indianapolis")
 def now_str():
     return datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 app = Flask(__name__)
 
-# ---- Secrets & config ----
-app.secret_key = os.environ.get("SECRET_KEY", "dev-only-override")
-PASSWORD = os.environ.get("TEACHER_DASHBOARD_PASSWORD", "dev-password")
+# ---------- SECRETS & CONFIG (env-first) ----------
+app.secret_key = os.environ.get("SECRET_KEY", "dev-only-override")  # dev fallback
+PASSWORD = os.environ.get("TEACHER_DASHBOARD_PASSWORD", "dev-password")  # dev fallback
+
 HALL_LIMIT = int(os.environ.get("HALL_LIMIT", 10))
 MAX_QUARTER_PASSES = int(os.environ.get("MAX_QUARTER_PASSES", 18))
 
-# ---- Google Sheets auth (env-first) ----
+# ---------- GOOGLE SHEETS (env-first creds, modern gspread auth) ----------
 google_creds_json = os.environ.get("GOOGLE_CREDS_JSON")
 if google_creds_json:
-    google_creds = json.loads(google_creds_json)
+    try:
+        google_creds = json.loads(google_creds_json)
+    except json.JSONDecodeError as e:
+        raise RuntimeError("GOOGLE_CREDS_JSON is set but contains invalid JSON.") from e
 else:
-    with open("service_account.json") as f:
-        google_creds = json.load(f)
+    # Local development - load from file (keep out of git via .gitignore)
+    try:
+        with open("service_account.json") as f:
+            google_creds = json.load(f)
+    except FileNotFoundError as e:
+        raise RuntimeError(
+            "No GOOGLE_CREDS_JSON env var and service_account.json not found. "
+            "Set GOOGLE_CREDS_JSON in Render (paste full JSON) or add service_account.json locally."
+        ) from e
 
+# Modern auth (no oauth2client needed)
 client = gspread.service_account_from_dict(google_creds)
 SHEET_NAME = os.environ.get("SHEET_NAME", "HallPassTracker")
 sheet = client.open(SHEET_NAME).sheet1
 
-# ---- Choices ----
+# ---------- CHOICES ----------
 TEACHERS = [
-    "R. Ahlrich","B. Ames","D. Andrews","B. Barron","J. Bird","B. Brennan","T. Brennan","B. Breyette",
-    "C. Caine","H. Carbaugh-Keefe","B. Carroll","L. Carroll","C. Carver","M. Chavez","J. Clark","L. Day","A. De Lucenay",
-    "D. Derifield","J. Dreibelbis","B. Garrity","K. Garrity","S. Garrity","N. Hart","R. Heeren","S. Houston",
-    "C. Hughes","J. Jimenez","J. Kallenberg","B. Langowski","G. Miller","A. Schmeltz",
-    "P. Skirvin","A. Smith","B. Stiles","G. Stout","J. Taylor","S. Taylor","S. Vanlue"
+    "R. Ahlrich", "B. Ames", "D. Andrews", "B. Barron", "J. Bird", "B. Brennan", "T. Brennan", "B. Breyette",
+    "C. Caine", "H. Carbaugh-Keefe", "B. Carroll", "L. Carroll", "C. Carver", "M. Chavez", "J. Clark", "L. Day", "A. De Lucenay",
+    "D. Derifield", "J. Dreibelbis", "B. Garrity", "K. Garrity", "S. Garrity", "N. Hart", "R. Heeren", "S. Houston",
+    "C. Hughes", "J. Jimenez", "J. Kallenberg", "B. Langowski", "G. Miller", "A. Schmeltz",
+    "P. Skirvin", "A. Smith", "B. Stiles", "G. Stout", "J. Taylor", "S. Taylor", "S. Vanlue"
 ]
-REASONS = ["Restroom","Water","Office","Locker","Nurse","Other"]
-PERIODS = ["Advisory/STORM","Period 2","Period 3","Period 4","Period 5","Period 6","Period 7"]
+REASONS = ["Restroom", "Water", "Office", "Locker", "Nurse", "Other"]
+PERIODS = ["Advisory/STORM", "Period 2", "Period 3", "Period 4", "Period 5", "Period 6", "Period 7"]
 
-# ---- Header hardening ----
-EXPECTED_HEADERS = ["First Name","Last Name","Period","Teacher","Reason","Time Out","Time In"]
+# ---------- HELPERS ----------
 def read_passes():
-    """
-    Read rows using a fixed header schema and coerce any odd rows into dicts.
-    This survives duplicate/blank headers and short rows.
-    """
-    try:
-        # Preferred: dicts with our expected schema regardless of the real header row
-        recs = sheet.get_all_records(
-            expected_headers=EXPECTED_HEADERS,
-            head=1,
-            default_blank=""
-        )
-        # Safety: ensure each item is a dict (coerce lists if Google returns values)
-        fixed = []
-        for r in recs:
-            if isinstance(r, dict):
-                fixed.append(r)
-            elif isinstance(r, list):
-                fixed.append({
-                    h: (r[i] if i < len(r) else "")
-                    for i, h in enumerate(EXPECTED_HEADERS)
-                })
-            else:
-                # unknown type -> skip
-                continue
-        return fixed
-    except Exception:
-        # Absolute fallback: work from raw values
-        rows = sheet.get_all_values()
-        if not rows:
-            return []
-        fixed = []
-        for row in rows[1:]:
-            fixed.append({
-                h: (row[i] if i < len(row) else "")
-                for i, h in enumerate(EXPECTED_HEADERS)
-            })
-        return fixed
-
-def _header_index(col_name: str) -> int:
-    try:
-        row1 = sheet.row_values(1)
-    except Exception:
-        row1 = []
-    norm = [(h or "").strip().lower() for h in row1]
-    key = col_name.strip().lower()
-    if key in norm:
-        return norm.index(key) + 1
-    # fall back to our expected schema
-    return EXPECTED_HEADERS.index(col_name) + 1
+    records = sheet.get_all_records()
+    return [row for row in records if any(row.values())]
 
 def write_pass(entry):
     sheet.append_row([
@@ -104,14 +68,14 @@ def get_current_quarter():
     today = date.today()
     year = today.year
     quarters = {
-        "Q1": (date(year, 7, 1), date(year,10,31)),
-        "Q2": (date(year,11, 1), date(year+1,1,15)),
-        "Q3": (date(year, 1,16), date(year, 3,31)),
-        "Q4": (date(year, 4, 1), date(year, 6,30)),
+        "Q1": (date(year, 7, 1), date(year, 10, 31)),
+        "Q2": (date(year, 11, 1), date(year + 1, 1, 15)),
+        "Q3": (date(year, 1, 16), date(year, 3, 31)),
+        "Q4": (date(year, 4, 1), date(year, 6, 30)),
     }
-    for _, (start, end) in quarters.items():
+    for q, (start, end) in quarters.items():
         if start <= today <= end or (start.month > end.month and (today >= start or today <= end)):
-            return _
+            return q
     return "Unknown"
 
 def passes_this_quarter(first, last):
@@ -128,93 +92,82 @@ def passes_this_quarter(first, last):
         "Q4": (date(year, 4, 1), date(year, 6, 30)),
     }
     start, end = quarters.get(quarter, (None, None))
-
-    first_lc = first.strip().lower()
-    last_lc  = last.strip().lower()
-
     for row in passes:
-        # Coerce any non-dict rows just in case
-        if isinstance(row, list):
-            row = {EXPECTED_HEADERS[i]: (row[i] if i < len(row) else "")
-                   for i in range(len(EXPECTED_HEADERS))}
-        if not isinstance(row, dict):
-            continue
-
-        fn = str(row.get('First Name', '')).strip().lower()
-        ln = str(row.get('Last Name', '')).strip().lower()
-        if fn != first_lc or ln != last_lc:
-            continue
-
-        time_out_str = str(row.get('Time Out', '')).strip()
-        if not time_out_str:
-            continue
-        try:
-            time_out = datetime.strptime(time_out_str, "%Y-%m-%d %H:%M:%S").date()
-        except ValueError:
-            # Skip rows with unexpected date formats
-            continue
-
-        # Handle Q2 spanning New Year
-        if start and end and (start <= end and start <= time_out <= end or
-                              start and end and start > end and (time_out >= start or time_out <= end)):
-            count += 1
-
+        fn = row.get('First Name', '').strip().lower()
+        ln = row.get('Last Name', '').strip().lower()
+        if fn == first.strip().lower() and ln == last.strip().lower():
+            time_out_str = row.get('Time Out', '').strip()
+            if not time_out_str:
+                continue
+            try:
+                time_out = datetime.strptime(time_out_str, "%Y-%m-%d %H:%M:%S").date()
+                if start <= time_out <= end or (start > end and (time_out >= start or time_out <= end)):
+                    count += 1
+            except Exception:
+                continue
     return count
 
 def auto_close_stale_passes(max_minutes: int = 30) -> int:
+    """
+    Auto-sign students back in if they've been out longer than max_minutes.
+    Returns how many rows were auto-closed.
+    """
     try:
         rows = sheet.get_all_values()
         if not rows:
             return 0
-        timeout_idx = _header_index("Time Out") - 1
-        timein_idx  = _header_index("Time In")  - 1
+
+        headers = rows[0]
+        # Find the columns we need
+        try:
+            timeout_idx = headers.index("Time Out")
+            timein_idx  = headers.index("Time In")
+        except ValueError:
+            # Headers missing; nothing to do
+            return 0
+
         closed = 0
+        # Start at row 2 (sheet row numbers are 1-based; row 1 = headers)
         for r, row in enumerate(rows[1:], start=2):
-            if len(row) <= max(timeout_idx, timein_idx):
-                continue
             time_out = (row[timeout_idx] or "").strip()
             time_in  = (row[timein_idx]  or "").strip()
+
+            # Only consider rows that have Time Out and empty Time In
             if time_out and time_in == "":
+                # Parse "YYYY-MM-DD HH:MM:SS" written by now_str()
                 try:
                     out_dt = datetime.strptime(time_out, "%Y-%m-%d %H:%M:%S")
                 except ValueError:
+                    # Skip rows with unexpected formats
                     continue
+
+                # Compare using local time (you already have LOCAL_TZ and now_str())
                 now_naive = datetime.now(LOCAL_TZ).replace(tzinfo=None)
                 if now_naive - out_dt > timedelta(minutes=max_minutes):
                     sheet.update_cell(r, timein_idx + 1, now_str())
                     closed += 1
+
         return closed
     except Exception as e:
+        # Don't crash the request if Sheets is flaky—just log and continue
         print(f"auto_close_stale_passes error: {e}")
         return 0
 
-def _s(v):
-    """Coerce any value (None, float, etc.) to a safe trimmed string."""
-    try:
-        return str(v or "").strip()
-    except Exception:
-        return ""
-
-# ---- ROUTES ----
-@app.route("/", methods=["GET"])
+# ---------- ROUTES ----------
+@app.route('/')
 def home():
-    auto_close_stale_passes()  # keep this if you want auto-close behavior on page load
-    name = (request.args.get("name") or "").strip()
+    auto_close_stale_passes()  # 👈 add this
+    name = request.args.get('name')
     used_passes = None
-    if name and " " in name:
-        first, last = name.split(" ", 1)
-        used_passes = passes_this_quarter(first, last)
-        name = f"{first} {last}"
-    else:
-        name = None
-    return render_template(
-        "index.html",
-        name=name,
-        used_passes=used_passes,
-        teachers=TEACHERS,
-        reasons=REASONS,
-        periods=PERIODS,
-    )
+    if name:
+        try:
+            first, last = name.strip().split(' ', 1)
+            used_passes = passes_this_quarter(first, last)
+            name = f"{first} {last}"
+        except ValueError:
+            name = None
+    return render_template('index.html', name=name, used_passes=used_passes,
+                           teachers=TEACHERS, reasons=REASONS, periods=PERIODS)
 
 @app.route('/signout', methods=['POST'])
 def signout():
@@ -228,47 +181,72 @@ def signout():
     time_out = now_str()
 
     passes = read_passes()
-    currently_out = [p for p in passes if not p.get('Time In','').strip()]
+    currently_out = [p for p in passes if not p['Time In'].strip()]
     if len(currently_out) >= HALL_LIMIT:
         return render_template("error.html", message="The maximum number of students are already out. Please wait.")
     if passes_this_quarter(first_name, last_name) >= MAX_QUARTER_PASSES:
         return render_template("error.html", message="You have used all 18 passes for this quarter.")
 
     entry = {
-        'First Name': first_name, 'Last Name': last_name, 'Period': period,
-        'Teacher': teacher, 'Reason': final_reason,
-        'Time Out': time_out, 'Time In': ''
+        'First Name': first_name,
+        'Last Name': last_name,
+        'Period': period,
+        'Teacher': teacher,
+        'Reason': final_reason,
+        'Time Out': time_out,
+        'Time In': ''
     }
     write_pass(entry)
     return redirect(url_for('home', name=f"{first_name} {last_name}"))
 
 @app.route("/signin", methods=["POST"])
 def signin():
+    # Accept either "full_name" or "name" from the form
     full_name = (request.form.get("full_name") or request.form.get("name") or "").strip()
-    full_name = " ".join(full_name.split())
+    full_name = " ".join(full_name.split())  # normalize extra spaces
+
     if not full_name or " " not in full_name:
         return "First and last name are required", 400
-    parts = full_name.split(" ")
-    first_name, last_name = parts[0], " ".join(parts[1:])
 
-    records = read_passes()
-    time_in_col = _header_index("Time In")
+    parts = full_name.split(" ")
+    first_name = parts[0]
+    last_name = " ".join(parts[1:])
+
+    # Pull rows and header row from Google Sheets
+    records = sheet.get_all_records()
+    headers = sheet.row_values(1)
+    try:
+        time_in_col = headers.index("Time In") + 1
+    except ValueError as e:
+        return f"Missing expected column: {e}", 500
 
     target_first = first_name.strip().lower()
     target_last  = last_name.strip().lower()
 
-    for idx, row in enumerate(records, start=2):
+    # Find an active pass (Time In still blank-ish)
+    for idx, row in enumerate(records, start=2):  # data starts on row 2
         row_first = str(row.get("First Name", "")).strip().lower()
         row_last  = str(row.get("Last Name", "")).strip().lower()
         time_in_val = str(row.get("Time In", "")).strip()
-        if row_first == target_first and row_last == target_last and (time_in_val == "" or time_in_val.lower() in ("none","nan")):
+
+        is_time_in_empty = (time_in_val == "" or time_in_val.lower() in ("none", "nan"))
+
+        if row_first == target_first and row_last == target_last and is_time_in_empty:
+            # Update Time In
             sheet.update_cell(idx, time_in_col, now_str())
+            # Compute updated passes used this quarter
             used_passes = passes_this_quarter(first_name, last_name)
-            return render_template("signin_success.html",
-                                   first_name=first_name, last_name=last_name, used_passes=used_passes)
+            # Show confirmation page
+            return render_template(
+                "signin_success.html",
+                first_name=first_name,
+                last_name=last_name,
+                used_passes=used_passes
+            )
+
     return "Student not found or already signed in", 404
 
-@app.route('/login', methods=['GET','POST'])
+@app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         if request.form['password'] == PASSWORD:
@@ -284,20 +262,14 @@ def dashboard():
     auto_close_stale_passes()
     passes = read_passes()
     counts = get_pass_counts()
-currently_out = []
-for p in passes:
-    if not isinstance(p, dict):
-        continue
-    tin = _s(p.get('Time In')).lower()
-    if tin in ("", "none", "nan"):
-        currently_out.append(p)
+    currently_out = [p for p in passes if not str(p.get('Time In', '')).strip()]
     return render_template('dashboard.html', passes=currently_out, counts=counts)
 
 @app.route('/student_list')
 def student_list():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
-    auto_close_stale_passes()
+    auto_close_stale_passes()  # 👈 add this
     passes = read_passes()
     counts = get_pass_counts()
     current_quarter = get_current_quarter()
@@ -312,14 +284,11 @@ def get_pass_counts():
     passes = read_passes()
     counts = {}
     for entry in passes:
-        first = safe_str(entry.get("First Name", ""))
-        last  = safe_str(entry.get("Last Name", ""))
-        name = f"{first} {last}".strip()
-        if not name:
-            continue  # skip rows without names
+        name = f"{entry['First Name']} {entry['Last Name']}".strip()
         counts[name] = counts.get(name, 0) + 1
     return counts
 
+# ---- Optional health/diagnostic endpoints (handy on Render) ----
 @app.route("/healthz")
 def healthz():
     return "ok", 200
@@ -332,5 +301,6 @@ def diag():
     except Exception as e:
         return f"Sheets error: {type(e).__name__}: {e}", 500
 
-if __name__ == "__main__":
+# ---------- RUN ----------
+if __name__ == '__main__':
     app.run(debug=True)
