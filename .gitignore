@@ -1,2 +1,12 @@
+__pycache__/
+*.pyc
 credentials.json
 service_account.json
+roster.csv
+
+# Local student roster (do not commit)
+roster.csv
+
+# Python build artifacts
+__pycache__/
+*.pyc

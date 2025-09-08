@@ -1,58 +1,48 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Sign Out Form</title>
-</head>
-<body>
-    <h1>Sign Out Form</h1>
-    
-    {% if hallway_full %}
-        <p>🚫 The hallway is full. Please wait until someone signs in before you go.</p>
-        <a href="{{ url_for('index') }}">⬅ Back to Home</a>
-    {% else %}
-        <form method="post" action="{{ url_for('sign_out') }}">
-            <label for="last_name">Last Name:</label>
-            <input type="text" id="last_name" name="last_name" required><br><br>
+<h2>Sign Out Form</h2>
 
-            <label for="first_name">First Name:</label>
-            <input type="text" id="first_name" name="first_name" required><br><br>
+{% if hallway_full %}
+  🚫 The hallway is full. Please wait until someone signs in before you go.
+  <p><a href="{{ url_for('home') }}">⬅ Back to Home</a></p>
+{% else %}
+  <form method="POST" action="{{ url_for('signout') }}">
+    <label for="last_name">Last Name:</label>
+    <input type="text" id="last_name" name="last_name" required><br><br>
 
-            <label for="period">Period:</label>
-            <select id="period" name="period" required>
-                <option value="">--Select Period--</option>
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-                <option value="6">6</option>
-                <option value="7">7</option>
-                <option value="8">8</option>
-            </select><br><br>
+    <label for="first_name">First Name:</label>
+    <input type="text" id="first_name" name="first_name" required><br><br>
 
-            <label for="teacher">Teacher:</label>
-            <select id="teacher" name="teacher" required>
-                <option value="">--Select Teacher--</option>
-                <option value="Mr. Smith">Mr. Smith</option>
-                <option value="Ms. Johnson">Ms. Johnson</option>
-                <option value="Mrs. Lee">Mrs. Lee</option>
-                <!-- Add your teacher names here -->
-            </select><br><br>
+    <label for="student_id">PIN (Student ID):</label>
+    <input type="password" id="student_id" name="student_id" required><br><br>
 
-            <label for="reason">Reason:</label>
-            <select id="reason" name="reason" required>
-                <option value="">--Select Reason--</option>
-                <option value="Bathroom">Bathroom</option>
-                <option value="Nurse">Nurse</option>
-                <option value="Counselor">Counselor</option>
-                <option value="Other">Other</option>
-            </select><br><br>
+    <label for="period">Period:</label>
+    <select id="period" name="period" required>
+      <option value="">--Select Period--</option>
+      {% for p in periods %}
+        <option value="{{ p }}">{{ p }}</option>
+      {% endfor %}
+    </select><br><br>
 
-            <button type="submit">Sign Out</button>
-        </form>
-        <br>
-        <a href="{{ url_for('index') }}">⬅ Back to Home</a>
-    {% endif %}
-</body>
-</html>
+    <label for="teacher">Teacher:</label>
+    <select id="teacher" name="teacher" required>
+      <option value="">--Select Teacher--</option>
+      {% for t in teachers %}
+        <option value="{{ t }}">{{ t }}</option>
+      {% endfor %}
+    </select><br><br>
 
+    <label for="reason">Reason:</label>
+    <select id="reason" name="reason" required>
+      <option value="">--Select Reason--</option>
+      {% for r in reasons %}
+        <option value="{{ r }}">{{ r }}</option>
+      {% endfor %}
+    </select><br><br>
+
+    <label for="other_reason">Other (if selected):</label>
+    <input type="text" id="other_reason" name="other_reason"><br><br>
+
+    <button type="submit">Sign Out</button>
+  </form>
+
+  <p><a href="{{ url_for('home') }}">⬅ Back to Home</a></p>
+{% endif %}

@@ -1,6 +1,7 @@
 import os
 import json
 import gspread
+import csv  # <-- add this
 from flask import Flask, render_template, request, redirect, session, url_for
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
@@ -25,6 +26,76 @@ PASSWORD = os.environ.get("TEACHER_DASHBOARD_PASSWORD", "dev-password")  # dev f
 
 HALL_LIMIT = int(os.environ.get("HALL_LIMIT", 10))
 MAX_QUARTER_PASSES = int(os.environ.get("MAX_QUARTER_PASSES", 18))
+
+# ---------- PIN FEATURE FLAG & ROSTER SOURCES ----------
+# 0 = off (default, does nothing), 1 = on
+ENABLE_STUDENT_PIN = int(os.environ.get("ENABLE_STUDENT_PIN", "0"))
+
+# For local testing: a CSV in your project (columns: First Name, Last Name, Student ID)
+ROSTER_CSV_PATH = os.environ.get("ROSTER_CSV_PATH", "roster.csv")
+
+# For production: a tab in the same Google Sheet (columns: First Name, Last Name, PIN (or Student ID), Active)
+ROSTER_SHEET_NAME = os.environ.get("ROSTER_SHEET_NAME", "Roster")
+
+
+def load_roster_from_csv(path: str):
+    """CSV columns: First Name, Last Name, Student ID (used as PIN)."""
+    roster = {}
+    try:
+        with open(path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for r in reader:
+                fn = safe_str(r.get("First Name")).lower()
+                ln = safe_str(r.get("Last Name")).lower()
+                pin = safe_str(r.get("Student ID"))
+                if fn and ln and pin:
+                    roster[(fn, ln)] = {"pin": pin, "active": True}
+    except FileNotFoundError:
+        pass
+    return roster
+
+
+def load_roster_from_sheet():
+    """Read from a Google Sheet worksheet named ROSTER_SHEET_NAME."""
+    try:
+        ws = client.open(SHEET_NAME).worksheet(ROSTER_SHEET_NAME)
+    except Exception:
+        return {}
+    rows = ws.get_all_records(head=1, default_blank="")
+    roster = {}
+    for r in rows:
+        fn = safe_str(r.get("First Name")).lower()
+        ln = safe_str(r.get("Last Name")).lower()
+        pin = safe_str(r.get("PIN") or r.get("Student ID"))
+        active = safe_str(r.get("Active") or "Y").upper() != "N"
+        if fn and ln and pin:
+            roster[(fn, ln)] = {"pin": pin, "active": active}
+    return roster
+
+
+def get_roster():
+    """Load roster when PIN feature is enabled. CSV first (local), else Sheet tab."""
+    if not ENABLE_STUDENT_PIN:
+        return {}
+    roster = load_roster_from_csv(ROSTER_CSV_PATH)
+    if roster:
+        return roster
+    return load_roster_from_sheet()
+
+
+def check_student_pin(first: str, last: str, pin: str) -> bool:
+    """True iff roster contains the student, marked active, and the PIN matches."""
+    if not ENABLE_STUDENT_PIN:
+        return True  # feature disabled
+    roster = get_roster()
+    rec = roster.get((safe_str(first).lower(), safe_str(last).lower()))
+    return bool(rec and rec["active"] and safe_str(pin) == rec["pin"])
+
+
+# Make the flag available inside templates
+@app.context_processor
+def inject_flags():
+    return {"ENABLE_STUDENT_PIN": ENABLE_STUDENT_PIN}
 
 # ---------- GOOGLE SHEETS (env-first creds, modern gspread auth) ----------
 google_creds_json = os.environ.get("GOOGLE_CREDS_JSON")
@@ -186,12 +257,16 @@ def home():
 def signout():
     first_name = request.form['first_name']
     last_name  = request.form['last_name']
+    pin = request.form.get('pin', '')
     period     = request.form['period']
     teacher    = request.form['teacher']
     reason     = request.form['reason']
     other_reason = request.form.get('other_reason', '').strip()
     final_reason = other_reason if reason == "Other" and other_reason else reason
     time_out = now_str()
+
+    if not check_student_pin(first_name, last_name, pin):  # <-- add this
+        return render_template("error.html", message="Name/PIN doesn't match our roster."), 403
 
     passes = read_passes()
     currently_out = [p for p in passes if not safe_str(p.get('Time In'))]
@@ -217,13 +292,18 @@ def signin():
     # Accept either "full_name" or "name" from the form
     full_name = (request.form.get("full_name") or request.form.get("name") or "").strip()
     full_name = " ".join(full_name.split())  # normalize extra spaces
-
     if not full_name or " " not in full_name:
         return "First and last name are required", 400
 
     parts = full_name.split(" ")
     first_name = parts[0]
-    last_name = " ".join(parts[1:])
+    last_name  = " ".join(parts[1:])
+
+    # ⬇️ ADD THIS LINE
+    pin = request.form.get("pin", "").strip()
+
+    if not check_student_pin(first_name, last_name, pin):
+        return render_template("error.html", message="Name/PIN doesn't match our roster."), 403
 
     # Pull rows and header row from Google Sheets
     records = sheet.get_all_records()
@@ -236,26 +316,19 @@ def signin():
     target_first = first_name.strip().lower()
     target_last  = last_name.strip().lower()
 
-    # Find an active pass (Time In still blank-ish)
-    for idx, row in enumerate(records, start=2):  # data starts on row 2
-        row_first = str(row.get("First Name", "")).strip().lower()
-        row_last  = str(row.get("Last Name", "")).strip().lower()
+    for idx, row in enumerate(records, start=2):
+        row_first   = str(row.get("First Name", "")).strip().lower()
+        row_last    = str(row.get("Last Name", "")).strip().lower()
         time_in_val = str(row.get("Time In", "")).strip()
-
         is_time_in_empty = (time_in_val == "" or time_in_val.lower() in ("none", "nan"))
 
         if row_first == target_first and row_last == target_last and is_time_in_empty:
-            # Update Time In
             sheet.update_cell(idx, time_in_col, now_str())
-            # Compute updated passes used this quarter
             used_passes = passes_this_quarter(first_name, last_name)
-            # Show confirmation page
-            return render_template(
-                "signin_success.html",
-                first_name=first_name,
-                last_name=last_name,
-                used_passes=used_passes
-            )
+            return render_template("signin_success.html",
+                                   first_name=first_name,
+                                   last_name=last_name,
+                                   used_passes=used_passes)
 
     return "Student not found or already signed in", 404
 

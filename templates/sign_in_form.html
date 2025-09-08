@@ -2,5 +2,10 @@
   <label for="full_name">Full Name (First Last):</label><br>
   <input type="text" id="full_name" name="full_name" placeholder="First Last" required><br><br>
 
+  {% if ENABLE_STUDENT_PIN %}
+    <label for="pin">PIN:</label><br>
+    <input type="password" id="pin" name="pin" placeholder="Student ID / PIN" required><br><br>
+  {% endif %}
+
   <button type="submit">Sign In</button>
 </form>
