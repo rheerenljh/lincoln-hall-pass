@@ -1,167 +1,106 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Lincoln Jr. High Hall Pass</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            background-color: #f7f7f7;
-        }
-
-        header {
-            background-color: #000;
-            padding: 20px;
-            text-align: center;
-            color: white;
-        }
-
-        header img {
-            max-height: 80px;
-            vertical-align: middle;
-        }
-
-<img src="{{ url_for('static', filename='lincoln_logo.png') }}" alt="Lincoln Jr. High School Logo" width="200">
-
-        h1 {
-            color: #c8102e;
-            margin-top: 10px;
-        }
-
-        .container {
-            max-width: 600px;
-            background: white;
-            padding: 30px;
-            margin: 30px auto;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            border-top: 5px solid #c8102e;
-        }
-
-        form {
-            display: flex;
-            flex-direction: column;
-        }
-
-        label {
-            margin-top: 15px;
-            font-weight: bold;
-        }
-
-        input, select {
-            padding: 8px;
-            margin-top: 5px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-
-        button {
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #c8102e;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 16px;
-            cursor: pointer;
-        }
-
-        button:hover {
-            background-color: #9d0c21;
-        }
-
-        .sign-in-form {
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid #ccc;
-        }
-
-        .student-counter {
-            margin-top: 10px;
-            font-weight: bold;
-        }
-    </style>
-    <script>
-        function toggleOtherReason() {
-            const reasonDropdown = document.getElementById("reason");
-            const otherReasonInput = document.getElementById("other-reason-field");
-
-            if (reasonDropdown.value === "Other") {
-                otherReasonInput.style.display = "block";
-            } else {
-                otherReasonInput.style.display = "none";
-            }
-        }
-    </script>
+  <title>Lincoln Jr. High Hall Pass</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background-color: #f7f7f7; }
+    header { background-color: #000; padding: 20px; text-align: center; color: white; }
+    header img { max-height: 80px; vertical-align: middle; }
+    h1 { color: #c8102e; margin-top: 10px; }
+    .container { max-width: 600px; background: white; padding: 30px; margin: 30px auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); border-top: 5px solid #c8102e; }
+    form { display: flex; flex-direction: column; }
+    label { margin-top: 15px; font-weight: bold; }
+    input, select { padding: 8px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; }
+    button { margin-top: 20px; padding: 10px; background-color: #c8102e; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+    button:hover { background-color: #9d0c21; }
+    .sign-in-form { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; }
+    .student-counter { margin-top: 10px; font-weight: bold; }
+  </style>
+  <script>
+    function toggleOtherReason() {
+      const reasonDropdown = document.getElementById("reason");
+      const otherReasonInput = document.getElementById("other-reason-field");
+      otherReasonInput.style.display = (reasonDropdown.value === "Other") ? "block" : "none";
+    }
+  </script>
 </head>
 <body>
 
-    <header>
-        <img src="{{ url_for('static', filename='lincoln_logo.png') }}" alt="Lincoln Jr. High School Logo">
-        <h1>Lincoln Jr. High Hall Pass</h1>
-    </header>
+  <header>
+    <img src="{{ url_for('static', filename='lincoln_logo.png') }}" alt="Lincoln Jr. High School Logo">
+    <h1>Lincoln Jr. High Hall Pass</h1>
+  </header>
 
-    <div class="container">
-        {% if used_passes is not none %}
-            {% set color = 'green' %}
-            {% if used_passes >= 12 %}
-                {% set color = 'red' %}
-            {% elif used_passes >= 6 %}
-                {% set color = 'orange' %}
-            {% endif %}
-            <p class="student-counter">Hello, {{ name }}! You have used 
-                <span style="color: {{ color }};">{{ used_passes }}</span> of 18 passes this quarter.</p>
-        {% endif %}
+  <div class="container">
+    {% if used_passes is not none %}
+      {% set color = 'green' %}
+      {% if used_passes >= 12 %}
+        {% set color = 'red' %}
+      {% elif used_passes >= 6 %}
+        {% set color = 'orange' %}
+      {% endif %}
+      <p class="student-counter">
+        Hello, {{ name }}! You have used <span style="color: {{ color }};">{{ used_passes }}</span> of 18 passes this quarter.
+      </p>
+    {% endif %}
 
-        <form method="POST" action="/signout">
-            <label for="first_name">First Name:</label>
-            <input type="text" id="first_name" name="first_name" required>
+    <!-- SIGN OUT -->
+    <form method="POST" action="{{ url_for('signout') }}">
+      <label for="first_name">First Name:</label>
+      <input type="text" id="first_name" name="first_name" required>
 
-            <label for="last_name">Last Name:</label>
-            <input type="text" id="last_name" name="last_name" required>
+      <label for="last_name">Last Name:</label>
+      <input type="text" id="last_name" name="last_name" required>
 
-            <label for="period">Period:</label>
-            <select id="period" name="period" required>
-                <option value="">Select Period</option>
-                {% for period in periods %}
-                    <option value="{{ period }}">{{ period }}</option>
-                {% endfor %}
-            </select>
+      {% if ENABLE_STUDENT_PIN %}
+        <label for="pin_out">PIN (Student ID):</label>
+        <input type="password" id="pin_out" name="pin" required>
+      {% endif %}
 
-            <label for="teacher">Teacher:</label>
-            <select id="teacher" name="teacher" required>
-                <option value="">Select Teacher</option>
-                {% for teacher in teachers %}
-                    <option value="{{ teacher }}">{{ teacher }}</option>
-                {% endfor %}
-            </select>
+      <label for="period">Period:</label>
+      <select id="period" name="period" required>
+        <option value="">Select Period</option>
+        {% for period in periods %}
+          <option value="{{ period }}">{{ period }}</option>
+        {% endfor %}
+      </select>
 
-            <label for="reason">Reason:</label>
-            <select id="reason" name="reason" onchange="toggleOtherReason()" required>
-                <option value="">Select Reason</option>
-                {% for reason in reasons %}
-                    <option value="{{ reason }}">{{ reason }}</option>
-                {% endfor %}
-            </select>
+      <label for="teacher">Teacher:</label>
+      <select id="teacher" name="teacher" required>
+        <option value="">Select Teacher</option>
+        {% for teacher in teachers %}
+          <option value="{{ teacher }}">{{ teacher }}</option>
+        {% endfor %}
+      </select>
 
-            <div id="other-reason-field" style="display: none;">
-                <label for="other_reason">Enter custom reason:</label>
-                <input type="text" id="other_reason" name="other_reason">
-            </div>
+      <label for="reason">Reason:</label>
+      <select id="reason" name="reason" onchange="toggleOtherReason()" required>
+        <option value="">Select Reason</option>
+        {% for r in reasons %}
+          <option value="{{ r }}">{{ r }}</option>
+        {% endfor %}
+      </select>
 
-            <button type="submit">Sign Out</button>
-        </form>
+      <div id="other-reason-field" style="display: none;">
+        <label for="other_reason">Enter custom reason:</label>
+        <input type="text" id="other_reason" name="other_reason">
+      </div>
 
-        <div class="sign-in-form">
-            <h2>Sign In</h2>
-            <form method="POST" action="/signin">
-                <label for="name">Full Name (First Last):</label>
-                <input type="text" id="name" name="name" required>
-                <button type="submit">Sign In</button>
-            </form>
-        </div>
+      <button type="submit">Sign Out</button>
+    </form>
 
-        <p style="margin-top: 30px;"><a href="/login">Teacher Login</a></p>
+    <!-- SIGN IN -->
+    <div class="sign-in-form">
+      <h2>Sign In</h2>
+      <form method="POST" action="{{ url_for('signin') }}">
+        <label for="name">Full Name (First Last):</label>
+        <input type="text" id="name" name="name" required>
+        <button type="submit">Sign In</button>
+      </form>
     </div>
+
+    <p style="margin-top: 30px;"><a href="{{ url_for('login') }}">Teacher Login</a></p>
+  </div>
 
 </body>
 </html>

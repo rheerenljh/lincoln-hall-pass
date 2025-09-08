@@ -37,6 +37,10 @@ ROSTER_CSV_PATH = os.environ.get("ROSTER_CSV_PATH", "roster.csv")
 # For production: a tab in the same Google Sheet (columns: First Name, Last Name, PIN (or Student ID), Active)
 ROSTER_SHEET_NAME = os.environ.get("ROSTER_SHEET_NAME", "Roster")
 
+# Make the flag available inside templates
+@app.context_processor
+def inject_flags():
+    return {"ENABLE_STUDENT_PIN": ENABLE_STUDENT_PIN}
 
 def load_roster_from_csv(path: str):
     """CSV columns: First Name, Last Name, Student ID (used as PIN)."""
@@ -90,12 +94,6 @@ def check_student_pin(first: str, last: str, pin: str) -> bool:
     roster = get_roster()
     rec = roster.get((safe_str(first).lower(), safe_str(last).lower()))
     return bool(rec and rec["active"] and safe_str(pin) == rec["pin"])
-
-
-# Make the flag available inside templates
-@app.context_processor
-def inject_flags():
-    return {"ENABLE_STUDENT_PIN": ENABLE_STUDENT_PIN}
 
 # ---------- GOOGLE SHEETS (env-first creds, modern gspread auth) ----------
 google_creds_json = os.environ.get("GOOGLE_CREDS_JSON")
@@ -298,12 +296,6 @@ def signin():
     parts = full_name.split(" ")
     first_name = parts[0]
     last_name  = " ".join(parts[1:])
-
-    # ⬇️ ADD THIS LINE
-    pin = request.form.get("pin", "").strip()
-
-    if not check_student_pin(first_name, last_name, pin):
-        return render_template("error.html", message="Name/PIN doesn't match our roster."), 403
 
     # Pull rows and header row from Google Sheets
     records = sheet.get_all_records()
