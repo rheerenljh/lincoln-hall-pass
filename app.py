@@ -1,13 +1,14 @@
 import os
 import json
 import gspread
-import csv  # <-- add this
+import csv
 from flask import Flask, render_template, request, redirect, session, url_for
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 
-# ▶️ Add these three lines:
+# ---------- TIME & STRING HELPERS ----------
 LOCAL_TZ = ZoneInfo("America/Indiana/Indianapolis")
+
 def now_str():
     return datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -17,6 +18,20 @@ def safe_str(v):
         return str(v or "").strip()
     except Exception:
         return ""
+
+def normalize_pin(v) -> str:
+    """
+    Normalize any PIN / Student ID-like value to a 4-digit string:
+    - keep only digits,
+    - use the last 4 digits,
+    - zero-pad on the left to length 4.
+    This makes '0123', '123', '123.0', '  00123 ' all compare equal.
+    """
+    s = safe_str(v)
+    digits = "".join(ch for ch in s if ch.isdigit())
+    if not digits:
+        return ""
+    return digits[-4:].zfill(4)
 
 app = Flask(__name__)
 
@@ -42,6 +57,30 @@ ROSTER_SHEET_NAME = os.environ.get("ROSTER_SHEET_NAME", "Roster")
 def inject_flags():
     return {"ENABLE_STUDENT_PIN": ENABLE_STUDENT_PIN}
 
+# ---------- GOOGLE SHEETS (env-first creds, modern gspread auth) ----------
+google_creds_json = os.environ.get("GOOGLE_CREDS_JSON")
+if google_creds_json:
+    try:
+        google_creds = json.loads(google_creds_json)
+    except json.JSONDecodeError as e:
+        raise RuntimeError("GOOGLE_CREDS_JSON is set but contains invalid JSON.") from e
+else:
+    # Local development - load from file (keep out of git via .gitignore)
+    try:
+        with open("service_account.json") as f:
+            google_creds = json.load(f)
+    except FileNotFoundError as e:
+        raise RuntimeError(
+            "No GOOGLE_CREDS_JSON env var and service_account.json not found. "
+            "Set GOOGLE_CREDS_JSON in Render (paste full JSON) or add service_account.json locally."
+        ) from e
+
+# Modern auth (no oauth2client needed)
+client = gspread.service_account_from_dict(google_creds)
+SHEET_NAME = os.environ.get("SHEET_NAME", "HallPassTracker")
+sheet = client.open(SHEET_NAME).sheet1
+
+# ---------- ROSTER LOADING ----------
 def load_roster_from_csv(path: str):
     """CSV columns: First Name, Last Name, Student ID (used as PIN)."""
     roster = {}
@@ -51,13 +90,13 @@ def load_roster_from_csv(path: str):
             for r in reader:
                 fn = safe_str(r.get("First Name")).lower()
                 ln = safe_str(r.get("Last Name")).lower()
-                pin = safe_str(r.get("Student ID"))
+                # (2) normalize when loading
+                pin = normalize_pin(r.get("Student ID"))
                 if fn and ln and pin:
                     roster[(fn, ln)] = {"pin": pin, "active": True}
     except FileNotFoundError:
         pass
     return roster
-
 
 def load_roster_from_sheet():
     """Read from a Google Sheet worksheet named ROSTER_SHEET_NAME."""
@@ -70,7 +109,8 @@ def load_roster_from_sheet():
     for r in rows:
         fn = safe_str(r.get("First Name")).lower()
         ln = safe_str(r.get("Last Name")).lower()
-        pin = safe_str(r.get("PIN") or r.get("Student ID"))
+        # (2) normalize when loading
+        pin = normalize_pin(r.get("PIN") or r.get("Student ID"))
         active = safe_str(r.get("Active") or "Y").upper() != "N"
         if fn and ln and pin:
             roster[(fn, ln)] = {"pin": pin, "active": active}
@@ -102,30 +142,9 @@ def check_student_pin(first: str, last: str, pin: str) -> bool:
         return True  # feature disabled
     roster = get_roster()
     rec = roster.get((safe_str(first).lower(), safe_str(last).lower()))
-    return bool(rec and rec["active"] and safe_str(pin) == rec["pin"])
-
-# ---------- GOOGLE SHEETS (env-first creds, modern gspread auth) ----------
-google_creds_json = os.environ.get("GOOGLE_CREDS_JSON")
-if google_creds_json:
-    try:
-        google_creds = json.loads(google_creds_json)
-    except json.JSONDecodeError as e:
-        raise RuntimeError("GOOGLE_CREDS_JSON is set but contains invalid JSON.") from e
-else:
-    # Local development - load from file (keep out of git via .gitignore)
-    try:
-        with open("service_account.json") as f:
-            google_creds = json.load(f)
-    except FileNotFoundError as e:
-        raise RuntimeError(
-            "No GOOGLE_CREDS_JSON env var and service_account.json not found. "
-            "Set GOOGLE_CREDS_JSON in Render (paste full JSON) or add service_account.json locally."
-        ) from e
-
-# Modern auth (no oauth2client needed)
-client = gspread.service_account_from_dict(google_creds)
-SHEET_NAME = os.environ.get("SHEET_NAME", "HallPassTracker")
-sheet = client.open(SHEET_NAME).sheet1
+    # (3) normalize the entered pin before comparing
+    entered = normalize_pin(pin)
+    return bool(rec and rec["active"] and entered and entered == rec["pin"])
 
 # ---------- CHOICES ----------
 TEACHERS = [
@@ -273,7 +292,6 @@ def home():
         last_name_options=last_names
     )
 
-
 @app.route('/signout', methods=['POST'])
 def signout():
     first_name   = request.form.get('first_name', '').strip()
@@ -300,7 +318,8 @@ def signout():
 
     # If PIN feature is enabled, validate client + server side
     if ENABLE_STUDENT_PIN:
-        if len(pin) != 4 or not pin.isdigit():
+        # simple client-side-ish validation; robustness handled by normalize_pin in check_student_pin
+        if not pin:
             return render_template(
                 "index.html",
                 error="Enter the last 4 digits of your Student ID (numbers only).",
@@ -348,7 +367,6 @@ def signout():
 
     return redirect(url_for('home', name=f"{first_name} {last_name}"))
 
-
 @app.route("/signin", methods=["POST"])
 def signin():
     # Accept either "full_name" or "name" from the form
@@ -388,7 +406,6 @@ def signin():
 
     return "Student not found or already signed in", 404
 
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -397,7 +414,6 @@ def login():
             return redirect(url_for('dashboard'))
         return render_template('login.html', error='Incorrect password')
     return render_template('login.html')
-
 
 @app.route('/dashboard')
 def dashboard():
@@ -409,7 +425,6 @@ def dashboard():
     currently_out = [p for p in passes if not str(p.get('Time In', '')).strip()]
     return render_template('dashboard.html', passes=currently_out, counts=counts)
 
-
 @app.route('/student_list')
 def student_list():
     if not session.get('logged_in'):
@@ -420,12 +435,10 @@ def student_list():
     current_quarter = get_current_quarter()
     return render_template('student_list.html', counts=counts, current_quarter=current_quarter)
 
-
 @app.route('/logout')
 def logout():
     session['logged_in'] = False
     return redirect(url_for('home'))
-
 
 def get_pass_counts():
     passes = read_passes()
@@ -438,7 +451,6 @@ def get_pass_counts():
             continue  # skip rows without names
         counts[name] = counts.get(name, 0) + 1
     return counts
-
 
 # ---- Optional health/diagnostic endpoints (handy on Render) ----
 @app.route("/healthz")
