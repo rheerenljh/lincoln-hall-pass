@@ -86,6 +86,18 @@ def get_roster():
         return roster
     return load_roster_from_sheet()
 
+def get_roster_name_lists():
+    """
+    Returns three sorted lists derived from the roster:
+    - first_names: unique first names, Title-cased
+    - last_names: unique last names, Title-cased
+    - full_names: 'First Last' combined, Title-cased (optional use)
+    """
+    roster = get_roster()  # {(fn, ln): {...}}
+    first_names = sorted({fn.title() for (fn, ln) in roster.keys()})
+    last_names  = sorted({ln.title() for (fn, ln) in roster.keys()})
+    full_names  = sorted({f"{fn.title()} {ln.title()}" for (fn, ln) in roster.keys()})
+    return first_names, last_names, full_names
 
 def check_student_pin(first: str, last: str, pin: str) -> bool:
     """True iff roster contains the student, marked active, and the PIN matches."""
