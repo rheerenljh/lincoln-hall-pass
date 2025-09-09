@@ -55,37 +55,36 @@
     {% endif %}
 
     <!-- SIGN OUT -->
-    <form method="POST" action="{{ url_for('signout') }}">
-      <!-- Last Name first for quicker selection -->
-      <label for="last_name">Last Name:</label>
-      <input
-        type="text"
-        id="last_name"
-        name="last_name"
-        list="last-name-list"
-        autocomplete="off"
-        required
-      >
-      <datalist id="last-name-list">
-        {% for ln in last_name_options %}
-          <option value="{{ ln }}"></option>
-        {% endfor %}
-      </datalist>
+<form method="POST" action="{{ url_for('signout') }}">
+  <label for="first_name">First Name:</label>
+  <input
+    type="text"
+    id="first_name"
+    name="first_name"
+    list="first-name-list"
+    autocomplete="off"
+    required
+  >
+  <datalist id="first-name-list">
+    {% for fn in first_name_options %}
+      <option value="{{ fn }}"></option>
+    {% endfor %}
+  </datalist>
 
-      <label for="first_name">First Name:</label>
-      <input
-        type="text"
-        id="first_name"
-        name="first_name"
-        list="first-name-list"
-        autocomplete="off"
-        required
-      >
-      <datalist id="first-name-list">
-        {% for fn in first_name_options %}
-          <option value="{{ fn }}"></option>
-        {% endfor %}
-      </datalist>
+  <label for="last_name">Last Name:</label>
+  <input
+    type="text"
+    id="last_name"
+    name="last_name"
+    list="last-name-list"
+    autocomplete="off"
+    required
+  >
+  <datalist id="last-name-list">
+    {% for ln in last_name_options %}
+      <option value="{{ ln }}"></option>
+    {% endfor %}
+  </datalist>
 
       {% if ENABLE_STUDENT_PIN %}
         <label for="pin_out">Student ID (last 4):</label>

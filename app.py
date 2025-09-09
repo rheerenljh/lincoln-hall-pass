@@ -76,11 +76,8 @@ def load_roster_from_sheet():
             roster[(fn, ln)] = {"pin": pin, "active": active}
     return roster
 
-
 def get_roster():
-    """Load roster when PIN feature is enabled. CSV first (local), else Sheet tab."""
-    if not ENABLE_STUDENT_PIN:
-        return {}
+    """Always load roster for suggestions. CSV first (local), else Sheet tab."""
     roster = load_roster_from_csv(ROSTER_CSV_PATH)
     if roster:
         return roster
@@ -250,7 +247,11 @@ def auto_close_stale_passes(max_minutes: int = 30) -> int:
 # ---------- ROUTES ----------
 @app.route('/')
 def home():
-    auto_close_stale_passes()  # 👈 add this
+    auto_close_stale_passes()  # keep this
+
+    # Build name options for datalist suggestions
+    first_names, last_names, _ = get_roster_name_lists()
+
     name = request.args.get('name')
     used_passes = None
     if name:
@@ -260,31 +261,80 @@ def home():
             name = f"{first} {last}"
         except ValueError:
             name = None
-    return render_template('index.html', name=name, used_passes=used_passes,
-                           teachers=TEACHERS, reasons=REASONS, periods=PERIODS)
+
+    return render_template(
+        'index.html',
+        name=name,
+        used_passes=used_passes,
+        teachers=TEACHERS,
+        reasons=REASONS,
+        periods=PERIODS,
+        first_name_options=first_names,
+        last_name_options=last_names
+    )
+
 
 @app.route('/signout', methods=['POST'])
 def signout():
-    first_name = request.form['first_name']
-    last_name  = request.form['last_name']
-    pin = request.form.get('pin', '')
-    period     = request.form['period']
-    teacher    = request.form['teacher']
-    reason     = request.form['reason']
+    first_name   = request.form.get('first_name', '').strip()
+    last_name    = request.form.get('last_name', '').strip()
+    pin          = request.form.get('pin', '').strip()
+    period       = request.form.get('period', '').strip()
+    teacher      = request.form.get('teacher', '').strip()
+    reason       = request.form.get('reason', '').strip()
     other_reason = request.form.get('other_reason', '').strip()
-    final_reason = other_reason if reason == "Other" and other_reason else reason
-    time_out = now_str()
+    final_reason = other_reason if (reason == "Other" and other_reason) else reason
+    time_out     = now_str()
 
-    if not check_student_pin(first_name, last_name, pin):  # <-- add this
-        return render_template("error.html", message="Name/PIN doesn't match our roster."), 403
+    # Preload options for any early return
+    first_names, last_names, _ = get_roster_name_lists()
 
+    # Basic validation
+    if not first_name or not last_name:
+        return render_template(
+            "index.html",
+            error="First and last name are required.",
+            teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
+            first_name_options=first_names, last_name_options=last_names
+        ), 400
+
+    # If PIN feature is enabled, validate client + server side
+    if ENABLE_STUDENT_PIN:
+        if len(pin) != 4 or not pin.isdigit():
+            return render_template(
+                "index.html",
+                error="Enter the last 4 digits of your Student ID (numbers only).",
+                teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
+                first_name_options=first_names, last_name_options=last_names
+            ), 400
+        if not check_student_pin(first_name, last_name, pin):
+            return render_template(
+                "index.html",
+                error="Name and last 4 of Student ID didn’t match our roster.",
+                teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
+                first_name_options=first_names, last_name_options=last_names
+            ), 403
+
+    # Capacity checks
     passes = read_passes()
     currently_out = [p for p in passes if not safe_str(p.get('Time In'))]
     if len(currently_out) >= HALL_LIMIT:
-        return render_template("error.html", message="The maximum number of students are already out. Please wait.")
-    if passes_this_quarter(first_name, last_name) >= MAX_QUARTER_PASSES:
-        return render_template("error.html", message="You have used all 18 passes for this quarter.")
+        return render_template(
+            "index.html",
+            error="The maximum number of students are already out. Please wait.",
+            teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
+            first_name_options=first_names, last_name_options=last_names
+        )
 
+    if passes_this_quarter(first_name, last_name) >= MAX_QUARTER_PASSES:
+        return render_template(
+            "index.html",
+            error=f"You have used all {MAX_QUARTER_PASSES} passes for this quarter.",
+            teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
+            first_name_options=first_names, last_name_options=last_names
+        )
+
+    # Write entry (do NOT store the PIN; if you ever log it, mask it)
     entry = {
         'First Name': first_name,
         'Last Name': last_name,
@@ -295,7 +345,9 @@ def signout():
         'Time In': ''
     }
     write_pass(entry)
+
     return redirect(url_for('home', name=f"{first_name} {last_name}"))
+
 
 @app.route("/signin", methods=["POST"])
 def signin():
@@ -336,6 +388,7 @@ def signin():
 
     return "Student not found or already signed in", 404
 
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -344,6 +397,7 @@ def login():
             return redirect(url_for('dashboard'))
         return render_template('login.html', error='Incorrect password')
     return render_template('login.html')
+
 
 @app.route('/dashboard')
 def dashboard():
@@ -355,20 +409,23 @@ def dashboard():
     currently_out = [p for p in passes if not str(p.get('Time In', '')).strip()]
     return render_template('dashboard.html', passes=currently_out, counts=counts)
 
+
 @app.route('/student_list')
 def student_list():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
-    auto_close_stale_passes()  # 👈 add this
+    auto_close_stale_passes()
     passes = read_passes()
     counts = get_pass_counts()
     current_quarter = get_current_quarter()
     return render_template('student_list.html', counts=counts, current_quarter=current_quarter)
 
+
 @app.route('/logout')
 def logout():
     session['logged_in'] = False
     return redirect(url_for('home'))
+
 
 def get_pass_counts():
     passes = read_passes()
@@ -381,6 +438,7 @@ def get_pass_counts():
             continue  # skip rows without names
         counts[name] = counts.get(name, 0) + 1
     return counts
+
 
 # ---- Optional health/diagnostic endpoints (handy on Render) ----
 @app.route("/healthz")
