@@ -504,19 +504,33 @@ def signout():
             first_name_options=first_names, last_name_options=last_names
         ), 202  # Accepted (we got it)
 
-    # Write entry (do NOT store the PIN)
-    entry = {
-        'First Name': first_name,
-        'Last Name': last_name,
-        'Period': period,
-        'Teacher': teacher,
-        'Reason': final_reason,
-        'Time Out': time_out,
-        'Time In': ''
-    }
-    write_pass(entry)
+  # Write entry (do NOT store the PIN)
+entry = {
+    'First Name': first_name,
+    'Last Name': last_name,
+    'Period': period,
+    'Teacher': teacher,
+    'Reason': final_reason,
+    'Time Out': time_out,
+    'Time In': ''
+}
 
+# --- Safe write with detailed logging ---
+import traceback
+try:
+    write_pass(entry)  # this does sheet.append_row([...])
     return redirect(url_for('home', name=f"{first_name} {last_name}"))
+except Exception as e:
+    # Log a detailed traceback to Render logs so we can see the root cause
+    print("write_pass error:", repr(e))
+    print("TRACEBACK:\n", traceback.format_exc())
+    return render_template(
+        "index.html",
+        error="Couldn’t save your pass to the Google Sheet. Please try again in a moment.",
+        error_code="write_failed",
+        teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
+        first_name_options=first_names, last_name_options=last_names
+    ), 502
 
 @app.route("/signin", methods=["POST"])
 def signin():
