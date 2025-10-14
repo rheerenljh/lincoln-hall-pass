@@ -10,3 +10,8 @@ roster.csv
 # Python build artifacts
 __pycache__/
 *.pyc
+.venv/
+__pycache__/
+*.pyc
+service_account.json
+.env
