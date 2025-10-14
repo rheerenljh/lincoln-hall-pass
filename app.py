@@ -162,9 +162,36 @@ else:
         ) from e
 
 # Modern auth (no oauth2client needed)
+# Modern auth (no oauth2client needed)
 client = gspread.service_account_from_dict(google_creds)
+
 SHEET_NAME = os.environ.get("SHEET_NAME", "HallPassTracker")
-sheet = client.open(SHEET_NAME).sheet1
+PASS_LOG_SHEET_NAME = os.environ.get("PASS_LOG_SHEET_NAME", "PassLog").strip()
+
+# The exact columns your routes expect
+PASS_HEADERS = ["First Name", "Last Name", "Period", "Teacher", "Reason", "Time Out", "Time In"]
+
+def _get_or_create_pass_sheet():
+    """Open the pass log worksheet by name; create and seed headers if missing."""
+    ss = client.open(SHEET_NAME)
+    try:
+        ws = ss.worksheet(PASS_LOG_SHEET_NAME)
+    except gspread.exceptions.WorksheetNotFound:
+        ws = ss.add_worksheet(title=PASS_LOG_SHEET_NAME, rows=1000, cols=len(PASS_HEADERS))
+        ws.append_row(PASS_HEADERS)
+        return ws
+
+    # Ensure headers are present/consistent (first row)
+    current = ws.row_values(1)
+    if [c.strip() for c in current] != PASS_HEADERS:
+        if not current:
+            ws.append_row(PASS_HEADERS)  # empty sheet
+        else:
+            ws.update('1:1', [PASS_HEADERS])  # overwrite header row
+    return ws
+
+# Global handle used everywhere else in your code
+sheet = _get_or_create_pass_sheet()
 
 # ---------- ROSTER LOADING ----------
 def load_roster_from_csv(path: str):
@@ -581,6 +608,42 @@ def get_pass_counts():
         if _within_period(tout, start_dt, end_dt):
             counts[name] = counts.get(name, 0) + 1
     return counts
+
+@app.route("/diag_sheets")
+def diag_sheets():
+    try:
+        ss = client.open(SHEET_NAME)
+        worksheets = [ws.title for ws in ss.worksheets()]
+        # Try to open the desired pass log sheet; create if missing.
+        try:
+            ws = ss.worksheet(PASS_LOG_SHEET_NAME)
+            status = f"Found worksheet '{PASS_LOG_SHEET_NAME}'."
+        except gspread.exceptions.WorksheetNotFound:
+            ws = ss.add_worksheet(title=PASS_LOG_SHEET_NAME, rows=1000, cols=len(PASS_HEADERS))
+            ws.append_row(PASS_HEADERS)
+            status = f"Created worksheet '{PASS_LOG_SHEET_NAME}' and wrote headers."
+
+        # Ensure headers on row 1 are correct
+        current_headers = ws.row_values(1)
+        if [c.strip() for c in current_headers] != PASS_HEADERS:
+            if not current_headers:
+                ws.append_row(PASS_HEADERS)
+                status += " Added headers to empty sheet."
+            else:
+                ws.update('1:1', [PASS_HEADERS])
+                status += " Updated header row to expected columns."
+
+        return (
+            f"Opened spreadsheet: {ss.title}<br>"
+            f"Existing tabs: {worksheets}<br>"
+            f"PASS_LOG_SHEET_NAME: {PASS_LOG_SHEET_NAME}<br>"
+            f"Status: {status}<br>"
+            f"Headers now: {ws.row_values(1)}",
+            200
+        )
+    except Exception as e:
+        # This will surface permission issues like PERMISSION_DENIED
+        return f"diag_sheets error: {type(e).__name__}: {e}", 500
 
 # ---- Optional health/diagnostic endpoints (handy on Render) ----
 @app.route("/healthz")
