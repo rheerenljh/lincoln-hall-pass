@@ -314,6 +314,17 @@ def recent_signout_exists(first: str, last: str, window_seconds: int = 20) -> bo
                 return True
     return False
 
+def render_index_error(error_msg: str, error_code: str, status: int = 400):
+    # Always pass the same context the template expects
+    first_names, last_names, _ = get_roster_name_lists()
+    return render_template(
+        "index.html",
+        error=error_msg,
+        error_code=error_code,
+        teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
+        first_name_options=first_names, last_name_options=last_names
+    ), status
+
 def read_passes():
     records = sheet.get_all_records()
     return [row for row in records if any(row.values())]
@@ -434,87 +445,65 @@ def signout():
     final_reason = other_reason if (reason == "Other" and other_reason) else reason
     time_out     = now_str()
 
-    # Preload options for any early return
-    first_names, last_names, _ = get_roster_name_lists()
-
     # Basic validation
     if not first_name or not last_name:
-        return render_template(
-            "index.html",
-            error="First and last name are required.",
-            error_code="name_required",
-            teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
-            first_name_options=first_names, last_name_options=last_names
-        ), 400
+        return render_index_error("First and last name are required.", "name_required", 400)
 
-    # If PIN feature is enabled, validate
+    # PIN validation (if enabled)
     if ENABLE_STUDENT_PIN:
         if not pin:
-            return render_template(
-                "index.html",
-                error="Enter the last 4 digits of your Student ID (numbers only).",
-                error_code="pin_required",
-                teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
-                first_name_options=first_names, last_name_options=last_names
-            ), 400
+            return render_index_error(
+                "Enter the last 4 digits of your Student ID (numbers only).",
+                "pin_required",
+                400
+            )
         if not check_student_pin(first_name, last_name, pin):
-            return render_template(
-                "index.html",
-                error="Name and last 4 of Student ID didn’t match our roster.",
-                error_code="pin_mismatch",
-                teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
-                first_name_options=first_names, last_name_options=last_names
-            ), 403
+            return render_index_error(
+                "Name and last 4 of Student ID didn’t match our roster.",
+                "pin_mismatch",
+                403
+            )
 
-    # Require custom reason text if "Other" selected
+    # Require text if "Other"
     if reason == "Other" and not other_reason:
-        return render_template(
-            "index.html",
-            error="Please type your reason when selecting ‘Other’.",
-            error_code="other_required",
-            teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
-            first_name_options=first_names, last_name_options=last_names
-        ), 400
+        return render_index_error(
+            "Please type your reason when selecting ‘Other’.",
+            "other_required",
+            400
+        )
 
-    # Capacity and limit checks (fallback inline)
+    # --- Capacity guard (uses helper, clearer message) ---
     passes_all = read_passes()
     currently_out = [p for p in passes_all if not safe_str(p.get('Time In'))]
     if len(currently_out) >= HALL_LIMIT:
-        return render_template(
-            "index.html",
-            error="The maximum number of students are already out. Please wait.",
-            error_code="capacity",
-            teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
-            first_name_options=first_names, last_name_options=last_names
-        ), 429
+        return render_index_error(
+            f"The hall is at capacity ({HALL_LIMIT} students out). Please wait until someone returns.",
+            "capacity",
+            429  # Too Many Requests
+        )
 
+    # Quarter limit
     if passes_this_quarter(first_name, last_name) >= MAX_QUARTER_PASSES:
-        return render_template(
-            "index.html",
-            error=f"You have used all {MAX_QUARTER_PASSES} passes for this quarter.",
-            error_code="limit_reached",
-            teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
-            first_name_options=first_names, last_name_options=last_names
-        ), 403
+        return render_index_error(
+            f"You have used all {MAX_QUARTER_PASSES} passes for this quarter.",
+            "limit_reached",
+            403
+        )
 
-    # Duplicate protection
+    # --- Duplicate protection (uses helper) ---
     if student_has_open_pass(first_name, last_name):
-        return render_template(
-            "index.html",
-            error="You’re already signed out. Please sign back in before starting a new pass.",
-            error_code="already_out",
-            teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
-            first_name_options=first_names, last_name_options=last_names
-        ), 409
+        return render_index_error(
+            "You’re already signed out. Please sign back in before starting a new pass.",
+            "already_out",
+            409  # Conflict
+        )
 
     if recent_signout_exists(first_name, last_name, window_seconds=20):
-        return render_template(
-            "index.html",
-            error="We already received your sign-out. Please wait a few seconds.",
-            error_code="duplicate_click",
-            teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
-            first_name_options=first_names, last_name_options=last_names
-        ), 202
+        return render_index_error(
+            "We already received your sign-out. Please wait a few seconds.",
+            "duplicate_click",
+            202  # Accepted
+        )
 
     # Write entry (do NOT store the PIN)
     entry = {
@@ -535,13 +524,11 @@ def signout():
     except Exception as e:
         print("write_pass error:", repr(e))
         print("TRACEBACK:\n", traceback.format_exc())
-        return render_template(
-            "index.html",
-            error="Couldn’t save your pass to the Google Sheet. Please try again in a moment.",
-            error_code="write_failed",
-            teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
-            first_name_options=first_names, last_name_options=last_names
-        ), 502
+        return render_index_error(
+            "Couldn’t save your pass to the Google Sheet. Please try again in a moment.",
+            "write_failed",
+            502
+        )
 
 @app.route("/signin", methods=["POST"])
 def signin():
