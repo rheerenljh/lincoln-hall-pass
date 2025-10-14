@@ -447,7 +447,7 @@ def signout():
             first_name_options=first_names, last_name_options=last_names
         ), 400
 
-    # If PIN feature is enabled, validate client + server side
+    # If PIN feature is enabled, validate
     if ENABLE_STUDENT_PIN:
         if not pin:
             return render_template(
@@ -466,43 +466,38 @@ def signout():
                 first_name_options=first_names, last_name_options=last_names
             ), 403
 
-    # --- Guard rails: capacity / (optional) break / quarter limit ---
-    # If you added signout_checks() earlier, keep using it:
-    if 'signout_checks' in globals():
-        problems = signout_checks(first_name, last_name, block_on_no_quarter=False)
-        if problems:
-            code, msg = problems[0]
-            status_map = {"capacity": 429, "limit_reached": 403, "no_quarter": 409}
-            status = status_map.get(code, 400)
-            return render_template(
-                "index.html",
-                error=msg,
-                error_code=code,
-                teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
-                first_name_options=first_names, last_name_options=last_names
-            ), status
-    else:
-        # (Fallback) Do the two core checks inline if you didn't add signout_checks()
-        passes_all = read_passes()
-        currently_out = [p for p in passes_all if not safe_str(p.get('Time In'))]
-        if len(currently_out) >= HALL_LIMIT:
-            return render_template(
-                "index.html",
-                error="The maximum number of students are already out. Please wait.",
-                error_code="capacity",
-                teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
-                first_name_options=first_names, last_name_options=last_names
-            ), 429
-        if passes_this_quarter(first_name, last_name) >= MAX_QUARTER_PASSES:
-            return render_template(
-                "index.html",
-                error=f"You have used all {MAX_QUARTER_PASSES} passes for this quarter.",
-                error_code="limit_reached",
-                teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
-                first_name_options=first_names, last_name_options=last_names
-            ), 403
+    # Require custom reason text if "Other" selected
+    if reason == "Other" and not other_reason:
+        return render_template(
+            "index.html",
+            error="Please type your reason when selecting ‘Other’.",
+            error_code="other_required",
+            teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
+            first_name_options=first_names, last_name_options=last_names
+        ), 400
 
-    # --- Duplicate protection (idempotency) ---
+    # Capacity and limit checks (fallback inline)
+    passes_all = read_passes()
+    currently_out = [p for p in passes_all if not safe_str(p.get('Time In'))]
+    if len(currently_out) >= HALL_LIMIT:
+        return render_template(
+            "index.html",
+            error="The maximum number of students are already out. Please wait.",
+            error_code="capacity",
+            teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
+            first_name_options=first_names, last_name_options=last_names
+        ), 429
+
+    if passes_this_quarter(first_name, last_name) >= MAX_QUARTER_PASSES:
+        return render_template(
+            "index.html",
+            error=f"You have used all {MAX_QUARTER_PASSES} passes for this quarter.",
+            error_code="limit_reached",
+            teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
+            first_name_options=first_names, last_name_options=last_names
+        ), 403
+
+    # Duplicate protection
     if student_has_open_pass(first_name, last_name):
         return render_template(
             "index.html",
@@ -510,7 +505,7 @@ def signout():
             error_code="already_out",
             teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
             first_name_options=first_names, last_name_options=last_names
-        ), 409  # Conflict
+        ), 409
 
     if recent_signout_exists(first_name, last_name, window_seconds=20):
         return render_template(
@@ -519,35 +514,34 @@ def signout():
             error_code="duplicate_click",
             teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
             first_name_options=first_names, last_name_options=last_names
-        ), 202  # Accepted (we got it)
+        ), 202
 
-  # Write entry (do NOT store the PIN)
-entry = {
-    'First Name': first_name,
-    'Last Name': last_name,
-    'Period': period,
-    'Teacher': teacher,
-    'Reason': final_reason,
-    'Time Out': time_out,
-    'Time In': ''
-}
+    # Write entry (do NOT store the PIN)
+    entry = {
+        'First Name': first_name,
+        'Last Name': last_name,
+        'Period': period,
+        'Teacher': teacher,
+        'Reason': final_reason,
+        'Time Out': time_out,
+        'Time In': ''
+    }
 
-# --- Safe write with detailed logging ---
-import traceback
-try:
-    write_pass(entry)  # this does sheet.append_row([...])
-    return redirect(url_for('home', name=f"{first_name} {last_name}"))
-except Exception as e:
-    # Log a detailed traceback to Render logs so we can see the root cause
-    print("write_pass error:", repr(e))
-    print("TRACEBACK:\n", traceback.format_exc())
-    return render_template(
-        "index.html",
-        error="Couldn’t save your pass to the Google Sheet. Please try again in a moment.",
-        error_code="write_failed",
-        teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
-        first_name_options=first_names, last_name_options=last_names
-    ), 502
+    # Safe write with detailed logging
+    import traceback
+    try:
+        write_pass(entry)
+        return redirect(url_for('home', name=f"{first_name} {last_name}"))
+    except Exception as e:
+        print("write_pass error:", repr(e))
+        print("TRACEBACK:\n", traceback.format_exc())
+        return render_template(
+            "index.html",
+            error="Couldn’t save your pass to the Google Sheet. Please try again in a moment.",
+            error_code="write_failed",
+            teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
+            first_name_options=first_names, last_name_options=last_names
+        ), 502
 
 @app.route("/signin", methods=["POST"])
 def signin():
