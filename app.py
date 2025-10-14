@@ -190,6 +190,23 @@ def _get_or_create_pass_sheet():
             ws.update('1:1', [PASS_HEADERS])  # overwrite header row
     return ws
 
+# Initialize the global worksheet handle safely so startup issues don’t crash the app
+try:
+    sheet = _get_or_create_pass_sheet()
+except Exception as e:
+    print("Sheet init error:", repr(e))
+    # Minimal fallback so the app stays up; any write will raise a clear error
+    class _SheetFallback:
+        def append_row(self, *a, **k):
+            raise RuntimeError(f"Sheet init failed at startup: {e}")
+        def get_all_records(self):
+            return []
+        def get_all_values(self):
+            return []
+        def row_values(self, *_):
+            return []
+    sheet = _SheetFallback()
+
 # Global handle used everywhere else in your code
 sheet = _get_or_create_pass_sheet()
 
