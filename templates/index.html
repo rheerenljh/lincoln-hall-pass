@@ -1,7 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="utf-8" />
   <title>Lincoln Jr. High Hall Pass</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background-color: #f7f7f7; }
     header { background-color: #000; padding: 20px; text-align: center; color: white; }
@@ -16,7 +18,9 @@
     .sign-in-form { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; }
     .student-counter { margin-top: 10px; font-weight: bold; }
     .error-banner { background:#ffe5e7; color:#9d0c21; border:1px solid #f3b3b8; padding:10px 12px; border-radius:4px; margin-bottom:15px; }
+    .notice { background:#eef6ff; color:#123; border:1px solid #b7d0ff; padding:10px 12px; border-radius:4px; margin-bottom:15px; }
     small.helper { color:#555; margin-top:4px; }
+    .sr-only { position:absolute; left:-10000px; top:auto; width:1px; height:1px; overflow:hidden; }
   </style>
   <script>
     function toggleOtherReason() {
@@ -38,53 +42,82 @@
 
   <div class="container">
 
-    {% if error %}
-      <div class="error-banner">{{ error }}</div>
+    {# Quarter / limit context from context_processor #}
+    {% if CURRENT_QUARTER %}
+      <div class="notice">
+        {% if CURRENT_QUARTER == 'Unknown' %}
+          No active quarter (e.g., break day). Passes won’t count toward limits until school resumes.
+        {% else %}
+          Current Quarter: {{ CURRENT_QUARTER }} • Pass limit: {{ MAX_QUARTER_PASSES|default(18) }}
+        {% endif %}
+      </div>
     {% endif %}
 
+    {# Error area with specific hints based on error_code #}
+    {% if error %}
+      <div class="error-banner" role="alert" aria-live="polite">
+        {{ error }}
+        {% if error_code == 'capacity' %}
+          <div><small class="helper">All spots are currently taken. Please try again when someone returns.</small></div>
+        {% elif error_code == 'limit_reached' %}
+          <div><small class="helper">You’ve reached your {{ MAX_QUARTER_PASSES|default(18) }}-pass limit for {{ CURRENT_QUARTER }}. Talk to your teacher if you think this is a mistake.</small></div>
+        {% elif error_code == 'no_quarter' %}
+          <div><small class="helper">Sign-outs resume on the next school day of the new quarter.</small></div>
+        {% elif error_code == 'pin_required' %}
+          <div><small class="helper">Tip: Use digits only (e.g., 0 1 2 3). Include leading zeros.</small></div>
+        {% elif error_code == 'pin_mismatch' %}
+          <div><small class="helper">Check spelling of your first/last name and the last 4 digits (include leading zeros). If it still fails, ask your teacher to verify the roster.</small></div>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {# Student usage status (dynamic colors, dynamic limit) #}
     {% if used_passes is not none %}
+      {% set maxp = MAX_QUARTER_PASSES|default(18) %}
       {% set color = 'green' %}
-      {% if used_passes >= 12 %}
+      {% if used_passes >= (maxp * 2) // 3 %}
         {% set color = 'red' %}
-      {% elif used_passes >= 6 %}
+      {% elif used_passes >= maxp // 3 %}
         {% set color = 'orange' %}
       {% endif %}
       <p class="student-counter">
-        Hello, {{ name }}! You have used <span style="color: {{ color }};">{{ used_passes }}</span> of 18 passes this quarter.
+        Hello, {{ name }}! You have used
+        <span style="color: {{ color }};">{{ used_passes }}</span>
+        of {{ maxp }} passes this quarter{% if CURRENT_QUARTER and CURRENT_QUARTER != 'Unknown' %} ({{ CURRENT_QUARTER }}){% endif %}.
       </p>
     {% endif %}
 
     <!-- SIGN OUT -->
-<form method="POST" action="{{ url_for('signout') }}">
-  <label for="first_name">First Name:</label>
-  <input
-    type="text"
-    id="first_name"
-    name="first_name"
-    list="first-name-list"
-    autocomplete="off"
-    required
-  >
-  <datalist id="first-name-list">
-    {% for fn in first_name_options %}
-      <option value="{{ fn }}"></option>
-    {% endfor %}
-  </datalist>
+    <form method="POST" action="{{ url_for('signout') }}" novalidate>
+      <label for="first_name">First Name:</label>
+      <input
+        type="text"
+        id="first_name"
+        name="first_name"
+        list="first-name-list"
+        autocomplete="off"
+        required
+      >
+      <datalist id="first-name-list">
+        {% for fn in first_name_options %}
+          <option value="{{ fn }}"></option>
+        {% endfor %}
+      </datalist>
 
-  <label for="last_name">Last Name:</label>
-  <input
-    type="text"
-    id="last_name"
-    name="last_name"
-    list="last-name-list"
-    autocomplete="off"
-    required
-  >
-  <datalist id="last-name-list">
-    {% for ln in last_name_options %}
-      <option value="{{ ln }}"></option>
-    {% endfor %}
-  </datalist>
+      <label for="last_name">Last Name:</label>
+      <input
+        type="text"
+        id="last_name"
+        name="last_name"
+        list="last-name-list"
+        autocomplete="off"
+        required
+      >
+      <datalist id="last-name-list">
+        {% for ln in last_name_options %}
+          <option value="{{ ln }}"></option>
+        {% endfor %}
+      </datalist>
 
       {% if ENABLE_STUDENT_PIN %}
         <label for="pin_out">Student ID (last 4):</label>
@@ -99,6 +132,8 @@
           required
         >
         <small class="helper">Enter exactly 4 digits. If your ID starts with 0, include the 0.</small>
+      {% else %}
+        <span class="sr-only">PIN disabled</span>
       {% endif %}
 
       <label for="period">Period:</label>
@@ -131,6 +166,10 @@
       </div>
 
       <button type="submit">Sign Out</button>
+<small class="helper" aria-live="polite">
+  Tap “Sign Out” once. It may take a few seconds to save.
+</small>  
+
     </form>
 
     <!-- SIGN IN -->
@@ -146,5 +185,25 @@
     <p style="margin-top: 30px;"><a href="{{ url_for('login') }}">Teacher Login</a></p>
   </div>
 
+  <!-- ...your page content... -->
+
+  <!-- Prevent double-submit on Sign Out -->
+  <!-- Prevent double-submit on Sign Out -->
+  <script>
+    (function () {
+      const form = document.querySelector('form[action="{{ url_for("signout") }}"]');
+      if (!form) return;
+      const btn = form.querySelector('button[type="submit"]');
+
+      form.addEventListener('submit', function (e) {
+        if (btn.dataset.locked === '1') { e.preventDefault(); return false; }
+        btn.dataset.locked = '1';
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        btn.textContent = 'Processing… please wait';
+      });
+    })();
+  </script>
 </body>
 </html>
+

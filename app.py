@@ -9,6 +9,92 @@ from zoneinfo import ZoneInfo
 # ---------- TIME & STRING HELPERS ----------
 LOCAL_TZ = ZoneInfo("America/Indiana/Indianapolis")
 
+# Quarter/date helpers (end is EXCLUSIVE)
+DT_FMT = "%Y-%m-%d %H:%M:%S"
+
+# 👉 Update these dates to match your school calendar.
+# Example below assumes the 2025–2026 school year with Q2 starting Oct 20, 2025.
+# 👉 Quarter dates for 2025–2026 (END is EXCLUSIVE)
+QUARTERS = [
+    {"name": "Q1", "start": "2025-08-06", "end": "2025-10-10"},  # adjust start if needed
+    {"name": "Q2", "start": "2025-10-13", "end": "2025-12-20"},  # covers Oct 20–Dec 19
+    {"name": "Q3", "start": "2026-01-06", "end": "2026-03-07"},  # covers Jan 6–Mar 6
+    {"name": "Q4", "start": "2026-03-09", "end": "2026-05-23"},  # covers Mar 9–May 22
+]
+
+def signout_checks(first_name: str, last_name: str):
+    """
+    Return a list of (code, message) explaining why signout should be blocked.
+    If list is empty, signout is allowed.
+    """
+    issues = []
+
+    # Normalize names once
+    first = safe_str(first_name)
+    last  = safe_str(last_name)
+
+    # Quarter state
+    qname, start_dt, end_dt = _active_quarter_dt()
+
+    # If you want to block during breaks, keep this; otherwise delete this block.
+    if qname == "Unknown" or start_dt is None or end_dt is None:
+        issues.append((
+            "no_quarter",
+            "No active quarter (e.g., break day). Passes resume next school day."
+        ))
+
+    # Capacity check
+    passes = read_passes()
+    currently_out = [p for p in passes if not safe_str(p.get('Time In'))]
+    if len(currently_out) >= HALL_LIMIT:
+        issues.append((
+            "capacity",
+            "The maximum number of students are already out. Please wait until someone returns."
+        ))
+
+    # Quarter limit (only if there is an active quarter)
+    if qname != "Unknown":
+        used = passes_this_quarter(first, last)
+        if used >= MAX_QUARTER_PASSES:
+            issues.append((
+                "limit_reached",
+                f"You have used all {MAX_QUARTER_PASSES} passes for this quarter ({qname})."
+            ))
+
+    return issues
+
+def _to_local_midnight(date_str: str) -> datetime:
+    y, m, d = [int(x) for x in date_str.split("-")]
+    return datetime(y, m, d, 0, 0, 0, tzinfo=LOCAL_TZ)
+
+def _active_quarter_dt(now: datetime | None = None):
+    """Return (name, start_dt, end_dt) where end_dt is exclusive."""
+    now = now or datetime.now(LOCAL_TZ)
+    for q in QUARTERS:
+        start = _to_local_midnight(q["start"])
+        end   = _to_local_midnight(q["end"])  # exclusive
+        if start <= now < end:
+            return q["name"], start, end
+    # If after last end date, treat last quarter as open-ended (optional)
+    if QUARTERS and now >= _to_local_midnight(QUARTERS[-1]["end"]):
+        q = QUARTERS[-1]
+        return q["name"], _to_local_midnight(q["start"]), datetime.max.replace(tzinfo=LOCAL_TZ)
+    # If before first start, treat first as current (optional)
+    if QUARTERS and now < _to_local_midnight(QUARTERS[0]["start"]):
+        q = QUARTERS[0]
+        return q["name"], _to_local_midnight(q["start"]), _to_local_midnight(q["end"])
+    return "Unknown", None, None
+
+def _within_period(ts_str: str, start_dt: datetime, end_dt: datetime) -> bool:
+    """ts_str is 'YYYY-MM-DD HH:MM:SS' in local time."""
+    try:
+        ts = datetime.strptime((ts_str or "").strip(), DT_FMT)
+        # your stored timestamps are naïve; interpret as LOCAL_TZ
+        ts = ts.replace(tzinfo=LOCAL_TZ)
+        return start_dt is not None and end_dt is not None and (start_dt <= ts < end_dt)
+    except Exception:
+        return False
+
 def now_str():
     return datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -158,6 +244,32 @@ REASONS = ["Restroom", "Water", "Office", "Locker", "Nurse", "Other"]
 PERIODS = ["Advisory/STORM", "Period 2", "Period 3", "Period 4", "Period 5", "Period 6", "Period 7"]
 
 # ---------- HELPERS ----------
+def student_has_open_pass(first: str, last: str) -> bool:
+    """True if this student already has a row with Time Out set and empty Time In."""
+    first_l, last_l = safe_str(first).lower(), safe_str(last).lower()
+    for row in read_passes():
+        if safe_str(row.get('First Name')).lower() == first_l and safe_str(row.get('Last Name')).lower() == last_l:
+            if safe_str(row.get('Time Out')) and not safe_str(row.get('Time In')):
+                return True
+    return False
+
+def recent_signout_exists(first: str, last: str, window_seconds: int = 20) -> bool:
+    """True if a sign-out for this student was recorded within the last N seconds."""
+    first_l, last_l = safe_str(first).lower(), safe_str(last).lower()
+    now_local = datetime.now(LOCAL_TZ)
+    for row in read_passes():
+        if safe_str(row.get('First Name')).lower() == first_l and safe_str(row.get('Last Name')).lower() == last_l:
+            ts = safe_str(row.get('Time Out'))
+            if not ts:
+                continue
+            try:
+                t = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=LOCAL_TZ)
+            except ValueError:
+                continue
+            if (now_local - t).total_seconds() <= window_seconds:
+                return True
+    return False
+
 def read_passes():
     records = sheet.get_all_records()
     return [row for row in records if any(row.values())]
@@ -169,52 +281,26 @@ def write_pass(entry):
     ])
 
 def get_current_quarter():
-    today = date.today()
-    year = today.year
-    quarters = {
-        "Q1": (date(year, 7, 1), date(year, 10, 31)),
-        "Q2": (date(year, 11, 1), date(year + 1, 1, 15)),
-        "Q3": (date(year, 1, 16), date(year, 3, 31)),
-        "Q4": (date(year, 4, 1), date(year, 6, 30)),
-    }
-    for q, (start, end) in quarters.items():
-        if start <= today <= end or (start.month > end.month and (today >= start or today <= end)):
-            return q
-    return "Unknown"
+    name, _, _ = _active_quarter_dt()
+    return name
 
 def passes_this_quarter(first, last):
     passes = read_passes()
-    quarter = get_current_quarter()
-    count = 0
+    qname, start_dt, end_dt = _active_quarter_dt()
+    if start_dt is None or end_dt is None:
+        return 0
 
-    today = date.today()
-    year = today.year
-    quarters = {
-        "Q1": (date(year, 7, 1), date(year, 10, 31)),
-        "Q2": (date(year, 11, 1), date(year + 1, 1, 15)),
-        "Q3": (date(year, 1, 16), date(year, 3, 31)),
-        "Q4": (date(year, 4, 1), date(year, 6, 30)),
-    }
-    start, end = quarters.get(quarter, (None, None))
+    first_l = safe_str(first).lower()
+    last_l  = safe_str(last).lower()
+    count = 0
 
     for row in passes:
         fn = safe_str(row.get('First Name')).lower()
         ln = safe_str(row.get('Last Name')).lower()
-        if fn == safe_str(first).lower() and ln == safe_str(last).lower():
+        if fn == first_l and ln == last_l:
             time_out_str = safe_str(row.get('Time Out'))
-            if not time_out_str:
-                continue
-            try:
-                time_out = datetime.strptime(time_out_str, "%Y-%m-%d %H:%M:%S").date()
-            except ValueError:
-                continue
-
-            if start and end and (
-                (start <= end and start <= time_out <= end) or
-                (start > end and (time_out >= start or time_out <= end))
-            ):
+            if _within_period(time_out_str, start_dt, end_dt):
                 count += 1
-
     return count
 
 def auto_close_stale_passes(max_minutes: int = 30) -> int:
@@ -312,17 +398,18 @@ def signout():
         return render_template(
             "index.html",
             error="First and last name are required.",
+            error_code="name_required",
             teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
             first_name_options=first_names, last_name_options=last_names
         ), 400
 
     # If PIN feature is enabled, validate client + server side
     if ENABLE_STUDENT_PIN:
-        # simple client-side-ish validation; robustness handled by normalize_pin in check_student_pin
         if not pin:
             return render_template(
                 "index.html",
                 error="Enter the last 4 digits of your Student ID (numbers only).",
+                error_code="pin_required",
                 teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
                 first_name_options=first_names, last_name_options=last_names
             ), 400
@@ -330,30 +417,67 @@ def signout():
             return render_template(
                 "index.html",
                 error="Name and last 4 of Student ID didn’t match our roster.",
+                error_code="pin_mismatch",
                 teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
                 first_name_options=first_names, last_name_options=last_names
             ), 403
 
-    # Capacity checks
-    passes = read_passes()
-    currently_out = [p for p in passes if not safe_str(p.get('Time In'))]
-    if len(currently_out) >= HALL_LIMIT:
+    # --- Guard rails: capacity / (optional) break / quarter limit ---
+    # If you added signout_checks() earlier, keep using it:
+    if 'signout_checks' in globals():
+        problems = signout_checks(first_name, last_name, block_on_no_quarter=False)
+        if problems:
+            code, msg = problems[0]
+            status_map = {"capacity": 429, "limit_reached": 403, "no_quarter": 409}
+            status = status_map.get(code, 400)
+            return render_template(
+                "index.html",
+                error=msg,
+                error_code=code,
+                teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
+                first_name_options=first_names, last_name_options=last_names
+            ), status
+    else:
+        # (Fallback) Do the two core checks inline if you didn't add signout_checks()
+        passes_all = read_passes()
+        currently_out = [p for p in passes_all if not safe_str(p.get('Time In'))]
+        if len(currently_out) >= HALL_LIMIT:
+            return render_template(
+                "index.html",
+                error="The maximum number of students are already out. Please wait.",
+                error_code="capacity",
+                teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
+                first_name_options=first_names, last_name_options=last_names
+            ), 429
+        if passes_this_quarter(first_name, last_name) >= MAX_QUARTER_PASSES:
+            return render_template(
+                "index.html",
+                error=f"You have used all {MAX_QUARTER_PASSES} passes for this quarter.",
+                error_code="limit_reached",
+                teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
+                first_name_options=first_names, last_name_options=last_names
+            ), 403
+
+    # --- Duplicate protection (idempotency) ---
+    if student_has_open_pass(first_name, last_name):
         return render_template(
             "index.html",
-            error="The maximum number of students are already out. Please wait.",
+            error="You’re already signed out. Please sign back in before starting a new pass.",
+            error_code="already_out",
             teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
             first_name_options=first_names, last_name_options=last_names
-        )
+        ), 409  # Conflict
 
-    if passes_this_quarter(first_name, last_name) >= MAX_QUARTER_PASSES:
+    if recent_signout_exists(first_name, last_name, window_seconds=20):
         return render_template(
             "index.html",
-            error=f"You have used all {MAX_QUARTER_PASSES} passes for this quarter.",
+            error="We already received your sign-out. Please wait a few seconds.",
+            error_code="duplicate_click",
             teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
             first_name_options=first_names, last_name_options=last_names
-        )
+        ), 202  # Accepted (we got it)
 
-    # Write entry (do NOT store the PIN; if you ever log it, mask it)
+    # Write entry (do NOT store the PIN)
     entry = {
         'First Name': first_name,
         'Last Name': last_name,
@@ -442,14 +566,20 @@ def logout():
 
 def get_pass_counts():
     passes = read_passes()
+    qname, start_dt, end_dt = _active_quarter_dt()
     counts = {}
+    if start_dt is None or end_dt is None:
+        return counts
+
     for entry in passes:
         first = safe_str(entry.get("First Name"))
         last  = safe_str(entry.get("Last Name"))
         name = f"{first} {last}".strip()
         if not name:
-            continue  # skip rows without names
-        counts[name] = counts.get(name, 0) + 1
+            continue
+        tout = safe_str(entry.get("Time Out"))
+        if _within_period(tout, start_dt, end_dt):
+            counts[name] = counts.get(name, 0) + 1
     return counts
 
 # ---- Optional health/diagnostic endpoints (handy on Render) ----
