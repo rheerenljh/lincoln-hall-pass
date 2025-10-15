@@ -428,14 +428,30 @@ def auto_close_stale_passes(max_minutes: int = 30) -> int:
         return 0
 
 def render_index_error(error_msg: str, error_code: str, status: int = 400):
-    first_names, last_names, _ = get_roster_name_lists()
-    return render_template(
-        "index.html",
-        error=error_msg,
-        error_code=error_code,
-        teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
-        first_name_options=first_names, last_name_options=last_names
-    ), status
+    """Render index.html with a consistent context + HTTP status, never 500s."""
+    # Try to load roster options; if Sheets flakes, fail open with empty lists
+    try:
+        first_names, last_names, _ = get_roster_name_lists()
+    except Exception as e:
+        import traceback
+        print("error page roster load failed:", repr(e))
+        print("TRACEBACK:\n", traceback.format_exc())
+        first_names, last_names = [], []
+
+    # Try to render the template; if that somehow fails, return plain text
+    try:
+        return render_template(
+            "index.html",
+            error=error_msg,
+            error_code=error_code,
+            teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
+            first_name_options=first_names, last_name_options=last_names
+        ), status
+    except Exception as e:
+        import traceback
+        print("render_template(index.html) failed:", repr(e))
+        print("TRACEBACK:\n", traceback.format_exc())
+        return f"{error_msg}", status
 
 def student_has_open_pass(first: str, last: str) -> bool:
     first_l, last_l = safe_str(first).lower(), safe_str(last).lower()
