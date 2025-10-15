@@ -4,83 +4,59 @@
   <meta charset="utf-8" />
   <title>Lincoln Jr. High Hall Pass</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
- <style>
-  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background-color: #f7f7f7; }
-  header { background-color: #000; padding: 20px; text-align: center; color: white; }
-  header img { max-height: 80px; vertical-align: middle; }
-  h1 { color: #c8102e; margin-top: 10px; }
-  .container { max-width: 600px; background: white; padding: 30px; margin: 30px auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); border-top: 5px solid #c8102e; }
-  form { display: flex; flex-direction: column; }
-  label { margin-top: 15px; font-weight: bold; }
-  input, select { padding: 8px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; }
-  button { margin-top: 20px; padding: 10px; background-color: #c8102e; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
-  button:hover { background-color: #9d0c21; }
-  .sign-in-form { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; }
-  .student-counter { margin-top: 10px; font-weight: bold; }
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background-color: #f7f7f7; }
+    header { background-color: #000; padding: 20px; text-align: center; color: white; }
+    header img { max-height: 80px; vertical-align: middle; }
+    h1 { color: #c8102e; margin-top: 10px; }
+    .container { max-width: 600px; background: white; padding: 30px; margin: 30px auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); border-top: 5px solid #c8102e; }
+    form { display: flex; flex-direction: column; }
+    label { margin-top: 15px; font-weight: bold; }
+    input, select { padding: 8px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; }
+    button { margin-top: 20px; padding: 10px; background-color: #c8102e; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+    button:hover { background-color: #9d0c21; }
+    .sign-in-form { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; }
+    .student-counter { margin-top: 10px; font-weight: bold; }
 
-  /* --- Enhanced error banner --- */
-  .error-banner {
-    background:#ffe5e7;
-    color:#6b0f1a;
-    border:1px solid #f3b3b8;
-    border-left:6px solid #c8102e;  /* attention stripe */
-    padding:14px 16px;
-    border-radius:6px;
-    margin-bottom:18px;
-    font-size:1.1rem;               /* larger text */
-    line-height:1.35;
-    box-shadow: 0 2px 6px rgba(200,16,46,0.08);
-    outline: none;
-  }
-  .error-banner:focus { box-shadow: 0 0 0 3px rgba(200,16,46,0.2); }
-  .error-banner .error-title {
-    display:flex;
-    align-items:center;
-    gap:10px;
-    font-weight:800;                 /* bold headline */
-    margin-bottom:6px;
-  }
-  .error-actions {
-    margin-top:12px;
-    display:flex;
-    flex-wrap:wrap;
-    gap:8px;
-  }
+    /* Enhanced error banner */
+    .error-banner {
+      background:#ffe5e7;
+      color:#6b0f1a;
+      border:1px solid #f3b3b8;
+      border-left:6px solid #c8102e;
+      padding:14px 16px;
+      border-radius:6px;
+      margin-bottom:18px;
+      font-size:1.1rem;
+      line-height:1.35;
+      box-shadow: 0 2px 6px rgba(200,16,46,0.08);
+      outline: none;
+    }
+    .error-banner:focus { box-shadow: 0 0 0 3px rgba(200,16,46,0.2); }
+    .error-title { display:flex; align-items:center; gap:10px; font-weight:800; margin-bottom:6px; }
+    .error-actions { margin-top:12px; display:flex; flex-wrap:wrap; gap:8px; }
 
-  /* --- Buttons for error actions --- */
-  .button {
-    display:inline-block;
-    padding:10px 14px;
-    border-radius:6px;
-    text-decoration:none;
-    font-weight:600;
-    border:1px solid transparent;
-    transition: background-color .15s ease, color .15s ease, border-color .15s ease;
-  }
-  .button-primary {
-    background:#c8102e;
-    color:#fff;
-  }
-  .button-primary:hover { background:#9d0c21; }
-  .button-ghost {
-    background:#fff;
-    color:#c8102e;
-    border-color:#c8102e;
-  }
-  .button-ghost:hover { background:#ffeeef; }
+    /* Buttons used in error actions */
+    .button { display:inline-block; padding:10px 14px; border-radius:6px; text-decoration:none; font-weight:600; border:1px solid transparent; transition: background-color .15s ease, color .15s ease, border-color .15s ease; }
+    .button-primary { background:#c8102e; color:#fff; }
+    .button-primary:hover { background:#9d0c21; }
+    .button-ghost { background:#fff; color:#c8102e; border-color:#c8102e; }
+    .button-ghost:hover { background:#ffeeef; }
 
-  .notice { background:#eef6ff; color:#123; border:1px solid #b7d0ff; padding:10px 12px; border-radius:4px; margin-bottom:15px; }
-  small.helper { color:#555; margin-top:4px; }
-  .sr-only { position:absolute; left:-10000px; top:auto; width:1px; height:1px; overflow:hidden; }
-</style>
+    .notice { background:#eef6ff; color:#123; border:1px solid #b7d0ff; padding:10px 12px; border-radius:4px; margin-bottom:15px; }
+    small.helper { color:#555; margin-top:4px; display:block; }
+    .sr-only { position:absolute; left:-10000px; top:auto; width:1px; height:1px; overflow:hidden; }
+  </style>
+
   <script>
     function toggleOtherReason() {
       const reasonDropdown = document.getElementById("reason");
       const otherReasonInput = document.getElementById("other-reason-field");
+      if (!reasonDropdown || !otherReasonInput) return;
       otherReasonInput.style.display = (reasonDropdown.value === "Other") ? "block" : "none";
     }
     window.addEventListener('DOMContentLoaded', () => {
-      toggleOtherReason(); // set initial visibility based on current value
+      toggleOtherReason();
     });
   </script>
 </head>
@@ -91,121 +67,93 @@
     <h1>Lincoln Jr. High Hall Pass</h1>
   </header>
 
+  <div class="container">
+
     {# Quarter / limit context from context_processor #}
-  {% if CURRENT_QUARTER %}
-    <div class="notice">
-      {% if CURRENT_QUARTER == 'Unknown' %}
-        No active quarter (e.g., break day). Passes won’t count toward limits until school resumes.
-      {% else %}
-        Current Quarter: {{ CURRENT_QUARTER }} • Pass limit: {{ MAX_QUARTER_PASSES|default(18) }}
-      {% endif %}
-    </div>
-  {% endif %}
-
-  {# >>> Enhanced error banner (keep this ABOVE the usage counter) <<< #}
-  {% if error %}
-    <div class="error-banner" role="alert" aria-live="polite" tabindex="-1" id="error-banner">
-      <div class="error-title">⚠️ {{ error }}</div>
-
-      {# Specific hints by error_code #}
-      {% if error_code == 'capacity' %}
-        <div><small class="helper">All spots are currently taken. Please try again when someone returns.</small></div>
-      {% elif error_code == 'capacity_check_failed' %}
-        <div><small class="helper">We couldn’t check hall capacity. Please try again in a moment.</small></div>
-      {% elif error_code == 'limit_reached' %}
-        <div><small class="helper">You’ve reached your {{ MAX_QUARTER_PASSES|default(18) }}-pass limit{% if CURRENT_QUARTER %} for {{ CURRENT_QUARTER }}{% endif %}.</small></div>
-      {% elif error_code == 'limit_check_failed' %}
-        <div><small class="helper">We couldn’t verify your quarter pass count. Please try again shortly.</small></div>
-      {% elif error_code == 'already_out' %}
-        <div><small class="helper">You’re already signed out. Please sign back in before starting a new pass.</small></div>
-      {% elif error_code == 'duplicate_click' %}
-        <div><small class="helper">Don’t worry—your pass is saving. Give it a moment.</small></div>
-      {% elif error_code == 'dup_check_failed' %}
-        <div><small class="helper">Something went wrong checking your current pass. Please try again.</small></div>
-      {% elif error_code == 'pin_required' %}
-        <div><small class="helper">Tip: Use digits only (e.g., 0 1 2 3). Include leading zeros.</small></div>
-      {% elif error_code == 'pin_mismatch' %}
-        <div><small class="helper">Check spelling of your first/last name and the last 4 digits (include leading zeros).</small></div>
-      {% elif error_code == 'other_required' %}
-        <div><small class="helper">Please type your reason in the box below.</small></div>
-      {% elif error_code == 'name_required' %}
-        <div><small class="helper">Enter both first and last name.</small></div>
-      {% elif error_code == 'write_failed' %}
-        <div><small class="helper">Ask a teacher if this keeps happening; the sheet may need access.</small></div>
-      {% elif error_code == 'no_quarter' %}
-        <div><small class="helper">Sign-outs resume on the next school day of the new quarter.</small></div>
-      {% endif %}
-
-      <div class="error-actions">
-        <a class="button button-primary" href="#signout-form">Back to Sign Out</a>
-        <a class="button button-ghost" href="#name">Go to Sign In</a>
+    {% if CURRENT_QUARTER %}
+      <div class="notice">
+        {% if CURRENT_QUARTER == 'Unknown' %}
+          No active quarter (e.g., break day). Passes won’t count toward limits until school resumes.
+        {% else %}
+          Current Quarter: {{ CURRENT_QUARTER }} • Pass limit: {{ MAX_QUARTER_PASSES|default(18) }}
+        {% endif %}
       </div>
-    </div>
-  {% endif %}
-
-  {# >>> Usage counter (keep this BELOW the error banner) <<< #}
-  {% if used_passes is not none %}
-    {% set maxp = MAX_QUARTER_PASSES|default(18) %}
-    {% set color = 'green' %}
-    {% if used_passes >= (maxp * 2) // 3 %}
-      {% set color = 'red' %}
-    {% elif used_passes >= maxp // 3 %}
-      {% set color = 'orange' %}
     {% endif %}
-    <div class="student-counter">
-      Hello, {{ name }}! You have used
-      <strong style="color: {{ color }};">{{ used_passes }}</strong>
-      of {{ maxp }} passes this quarter{% if CURRENT_QUARTER and CURRENT_QUARTER != 'Unknown' %} ({{ CURRENT_QUARTER }}){% endif %}.
-    </div>
-  {% endif %}
+
+    {# Enhanced error banner (keep above the usage counter) #}
+    {% if error %}
+      <div class="error-banner" role="alert" aria-live="polite" tabindex="-1" id="error-banner">
+        <div class="error-title">⚠️ {{ error }}</div>
+
+        {% if error_code == 'capacity' %}
+          <div><small class="helper">All spots are currently taken. Please try again when someone returns.</small></div>
+        {% elif error_code == 'capacity_check_failed' %}
+          <div><small class="helper">We couldn’t check hall capacity. Please try again in a moment.</small></div>
+        {% elif error_code == 'limit_reached' %}
+          <div><small class="helper">You’ve reached your {{ MAX_QUARTER_PASSES|default(18) }}-pass limit{% if CURRENT_QUARTER %} for {{ CURRENT_QUARTER }}{% endif %}.</small></div>
+        {% elif error_code == 'limit_check_failed' %}
+          <div><small class="helper">We couldn’t verify your quarter pass count. Please try again shortly.</small></div>
+        {% elif error_code == 'already_out' %}
+          <div><small class="helper">You’re already signed out. Please sign back in before starting a new pass.</small></div>
+        {% elif error_code == 'duplicate_click' %}
+          <div><small class="helper">Don’t worry—your pass is saving. Give it a moment.</small></div>
+        {% elif error_code == 'dup_check_failed' %}
+          <div><small class="helper">Something went wrong checking your current pass. Please try again.</small></div>
+        {% elif error_code == 'pin_required' %}
+          <div><small class="helper">Tip: Use digits only (e.g., 0 1 2 3). Include leading zeros.</small></div>
+        {% elif error_code == 'pin_mismatch' %}
+          <div><small class="helper">Check your name spelling and the last 4 digits (include leading zeros).</small></div>
+        {% elif error_code == 'other_required' %}
+          <div><small class="helper">Please type your reason in the box below.</small></div>
+        {% elif error_code == 'name_required' %}
+          <div><small class="helper">Enter both first and last name.</small></div>
+        {% elif error_code == 'write_failed' %}
+          <div><small class="helper">Ask a teacher if this keeps happening; the sheet may need access.</small></div>
+        {% elif error_code == 'no_quarter' %}
+          <div><small class="helper">Sign-outs resume on the next school day of the new quarter.</small></div>
+        {% endif %}
+
+        <div class="error-actions">
+          <a class="button button-primary" href="#signout-form">Back to Sign Out</a>
+          <a class="button button-ghost" href="#name">Go to Sign In</a>
+        </div>
+      </div>
+    {% endif %}
+
+    {# Student usage status (keep below the error banner) #}
+    {% if used_passes is not none %}
+      {% set maxp = MAX_QUARTER_PASSES|default(18) %}
+      {% set color = 'green' %}
+      {% if used_passes >= (maxp * 2) // 3 %}
+        {% set color = 'red' %}
+      {% elif used_passes >= maxp // 3 %}
+        {% set color = 'orange' %}
+      {% endif %}
+      <div class="student-counter">
+        Hello, {{ name }}! You have used
+        <strong style="color: {{ color }};">{{ used_passes }}</strong>
+        of {{ maxp }} passes this quarter{% if CURRENT_QUARTER and CURRENT_QUARTER != 'Unknown' %} ({{ CURRENT_QUARTER }}){% endif %}.
+      </div>
+    {% endif %}
 
     <!-- SIGN OUT -->
     <form id="signout-form" method="POST" action="{{ url_for('signout') }}" novalidate>
       <label for="first_name">First Name:</label>
-      <input
-        type="text"
-        id="first_name"
-        name="first_name"
-        list="first-name-list"
-        autocomplete="off"
-        required
-      >
+      <input type="text" id="first_name" name="first_name" list="first-name-list" autocomplete="off" required>
       <datalist id="first-name-list">
-        {% for fn in first_name_options %}
-          <option value="{{ fn }}"></option>
-        {% endfor %}
+        {% for fn in first_name_options %}<option value="{{ fn }}"></option>{% endfor %}
       </datalist>
 
       <label for="last_name">Last Name:</label>
-      <input
-        type="text"
-        id="last_name"
-        name="last_name"
-        list="last-name-list"
-        autocomplete="off"
-        required
-      >
+      <input type="text" id="last_name" name="last_name" list="last-name-list" autocomplete="off" required>
       <datalist id="last-name-list">
-        {% for ln in last_name_options %}
-          <option value="{{ ln }}"></option>
-        {% endfor %}
+        {% for ln in last_name_options %}<option value="{{ ln }}"></option>{% endfor %}
       </datalist>
 
       {% if ENABLE_STUDENT_PIN %}
-       <label for="pin_out">Student ID (last 4):</label>
-      <input
-        type="text"
-        id="pin_out"
-        name="pin"
-        maxlength="4"
-        pattern="\d{4}"
-        inputmode="numeric"
-        autocomplete="off"
-        aria-describedby="pin_help"
-        required
-      >
-<small class="helper" id="pin_help">Enter exactly 4 digits. If your ID starts with 0, include the 0.</small>
-
+        <label for="pin_out">Student ID (last 4):</label>
+        <input type="text" id="pin_out" name="pin" maxlength="4" pattern="\d{4}" inputmode="numeric" autocomplete="off" aria-describedby="pin_help" required>
+        <small class="helper" id="pin_help">Enter exactly 4 digits. If your ID starts with 0, include the 0.</small>
       {% else %}
         <span class="sr-only">PIN disabled</span>
       {% endif %}
@@ -213,25 +161,19 @@
       <label for="period">Period:</label>
       <select id="period" name="period" required>
         <option value="">Select Period</option>
-        {% for period in periods %}
-          <option value="{{ period }}">{{ period }}</option>
-        {% endfor %}
+        {% for period in periods %}<option value="{{ period }}">{{ period }}</option>{% endfor %}
       </select>
 
       <label for="teacher">Teacher:</label>
       <select id="teacher" name="teacher" required>
         <option value="">Select Teacher</option>
-        {% for teacher in teachers %}
-          <option value="{{ teacher }}">{{ teacher }}</option>
-        {% endfor %}
+        {% for teacher in teachers %}<option value="{{ teacher }}">{{ teacher }}</option>{% endfor %}
       </select>
 
       <label for="reason">Reason:</label>
       <select id="reason" name="reason" onchange="toggleOtherReason()" required>
         <option value="">Select Reason</option>
-        {% for r in reasons %}
-          <option value="{{ r }}">{{ r }}</option>
-        {% endfor %}
+        {% for r in reasons %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
       </select>
 
       <div id="other-reason-field" style="display: none;">
@@ -240,10 +182,7 @@
       </div>
 
       <button type="submit">Sign Out</button>
-<small class="helper" aria-live="polite">
-  Tap “Sign Out” once. It may take a few seconds to save.
-</small>  
-
+      <small class="helper" aria-live="polite">Tap “Sign Out” once. It may take a few seconds to save.</small>
     </form>
 
     <!-- SIGN IN -->
@@ -259,36 +198,31 @@
     <p style="margin-top: 30px;"><a href="{{ url_for('login') }}">Teacher Login</a></p>
   </div>
 
-  <!-- ...your page content... -->
-
   <!-- Prevent double-submit on Sign Out -->
-<script>
-  (function () {
-    const form = document.getElementById('signout-form');
-    if (!form) return;
-    const btn = form.querySelector('button[type="submit"]');
+  <script>
+    (function () {
+      const form = document.getElementById('signout-form');
+      if (!form) return;
+      const btn = form.querySelector('button[type="submit"]');
 
-    form.addEventListener('submit', function (e) {
-      if (btn.dataset.locked === '1') { e.preventDefault(); return false; }
-      btn.dataset.locked = '1';
-      btn.disabled = true;
-      btn.setAttribute('aria-busy', 'true');
-      btn.textContent = 'Processing… please wait';
-    });
-  })();
-</script>
+      form.addEventListener('submit', function (e) {
+        if (btn.dataset.locked === '1') { e.preventDefault(); return false; }
+        btn.dataset.locked = '1';
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        btn.textContent = 'Processing… please wait';
+      });
+    })();
+  </script>
 
   <!-- Bring error banner into view & add focus; help buttons jump to form -->
   <script>
     window.addEventListener('DOMContentLoaded', () => {
-      // If there is an error banner, bring it into view and focus it
       const banner = document.getElementById('error-banner');
       if (banner) {
         banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
         banner.focus({ preventScroll: true });
       }
-
-      // When "Back to Sign Out" is clicked, focus the First Name field
       document.querySelectorAll('a[href="#signout-form"]').forEach(link => {
         link.addEventListener('click', () => {
           setTimeout(() => {
@@ -301,4 +235,5 @@
   </script>
 </body>
 </html>
+
 
