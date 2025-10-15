@@ -138,10 +138,19 @@ ROSTER_CSV_PATH = os.environ.get("ROSTER_CSV_PATH", "roster.csv")
 # For production: a tab in the same Google Sheet (columns: First Name, Last Name, PIN (or Student ID), Active)
 ROSTER_SHEET_NAME = os.environ.get("ROSTER_SHEET_NAME", "Roster")
 
-# Make the flag available inside templates
+# ---------- TEMPLATE GLOBALS ----------
 @app.context_processor
-def inject_flags():
-    return {"ENABLE_STUDENT_PIN": ENABLE_STUDENT_PIN}
+def inject_globals():
+    try:
+        current_q = get_current_quarter()
+    except Exception:
+        current_q = "Unknown"
+
+    return {
+        "ENABLE_STUDENT_PIN": ENABLE_STUDENT_PIN,
+        "CURRENT_QUARTER": current_q,
+        "MAX_QUARTER_PASSES": MAX_QUARTER_PASSES,
+    }
 
 # ---------- GOOGLE SHEETS (env-first creds, modern gspread auth) ----------
 google_creds_json = os.environ.get("GOOGLE_CREDS_JSON")
@@ -338,14 +347,26 @@ def recent_signout_exists(first: str, last: str, window_seconds: int = 20) -> bo
         return False
 
 def render_index_error(error_msg: str, error_code: str, status: int = 400):
-    # Always pass the same context the template expects
+    # Always build name options so users can try again immediately
     first_names, last_names, _ = get_roster_name_lists()
+    qname, _, _ = _active_quarter_dt()
     return render_template(
         "index.html",
         error=error_msg,
         error_code=error_code,
-        teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
-        first_name_options=first_names, last_name_options=last_names
+        # Required UI lists
+        teachers=TEACHERS,
+        reasons=REASONS,
+        periods=PERIODS,
+        first_name_options=first_names,
+        last_name_options=last_names,
+        # Quarter/pin context the template expects
+        CURRENT_QUARTER=qname,
+        MAX_QUARTER_PASSES=MAX_QUARTER_PASSES,
+        ENABLE_STUDENT_PIN=ENABLE_STUDENT_PIN,
+        # These are optional on error
+        name=None,
+        used_passes=None,
     ), status
 
 def read_passes():
@@ -512,34 +533,77 @@ def render_index_error(error_msg: str, error_code: str, status: int = 400):
         status,
     )
 
+# ---------- TEMPLATE GLOBALS ----------
+@app.context_processor
+def inject_globals():
+    # Keep all template-level globals in one place
+    try:
+        current_q = get_current_quarter()
+    except Exception:
+        current_q = "Unknown"
+
+    return {
+        "ENABLE_STUDENT_PIN": ENABLE_STUDENT_PIN,
+        "CURRENT_QUARTER": current_q,
+        "MAX_QUARTER_PASSES": MAX_QUARTER_PASSES,
+    }
+
 # ---------- ROUTES ----------
 @app.route('/')
 def home():
-    auto_close_stale_passes()  # keep this
+    import traceback
+    try:
+        auto_close_stale_passes()
 
-    # Build name options for datalist suggestions
-    first_names, last_names, _ = get_roster_name_lists()
+        # Build name options for datalist suggestions
+        first_names, last_names, _ = get_roster_name_lists()
 
-    name = request.args.get('name')
-    used_passes = None
-    if name:
-        try:
-            first, last = name.strip().split(' ', 1)
+        # Work out the current quarter name
+        qname, _, _ = _active_quarter_dt()
+
+        # Optional “hello, NAME” + usage count if a name param is present
+        name = (request.args.get('name') or '').strip() or None
+        used_passes = None
+        if name and ' ' in name:
+            first, last = name.split(' ', 1)
             used_passes = passes_this_quarter(first, last)
             name = f"{first} {last}"
-        except ValueError:
-            name = None
 
-    return render_template(
-        'index.html',
-        name=name,
-        used_passes=used_passes,
-        teachers=TEACHERS,
-        reasons=REASONS,
-        periods=PERIODS,
-        first_name_options=first_names,
-        last_name_options=last_names
-    )
+        # Always provide every key the template might use
+        return render_template(
+            'index.html',
+            name=name,
+            used_passes=used_passes,
+            teachers=TEACHERS,
+            reasons=REASONS,
+            periods=PERIODS,
+            first_name_options=first_names,
+            last_name_options=last_names,
+            CURRENT_QUARTER=qname,
+            MAX_QUARTER_PASSES=MAX_QUARTER_PASSES,
+            ENABLE_STUDENT_PIN=ENABLE_STUDENT_PIN,
+            error=None,
+            error_code=None
+        )
+    except Exception as e:
+        # Never 500 the home page—log and render with safe defaults
+        print("home() error:", repr(e))
+        print("TRACEBACK:\n", traceback.format_exc())
+        return render_template(
+            'index.html',
+            name=None,
+            used_passes=None,
+            teachers=TEACHERS,
+            reasons=REASONS,
+            periods=PERIODS,
+            first_name_options=[],
+            last_name_options=[],
+            CURRENT_QUARTER="Unknown",
+            MAX_QUARTER_PASSES=MAX_QUARTER_PASSES,
+            ENABLE_STUDENT_PIN=ENABLE_STUDENT_PIN,
+            error="We couldn’t load everything. You can still sign out below.",
+            error_code="home_render_partial"
+        ), 200
 
 @app.route('/signout', methods=['POST'])
 def signout():
