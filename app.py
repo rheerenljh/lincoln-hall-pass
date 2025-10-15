@@ -404,6 +404,40 @@ def auto_close_stale_passes(max_minutes: int = 30) -> int:
         print(f"auto_close_stale_passes error: {e}")
         return 0
 
+    def render_index_error(error_msg: str, error_code: str, status: int = 400):
+    first_names, last_names, _ = get_roster_name_lists()
+    return render_template(
+        "index.html",
+        error=error_msg,
+        error_code=error_code,
+        teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
+        first_name_options=first_names, last_name_options=last_names
+    ), status
+
+def student_has_open_pass(first: str, last: str) -> bool:
+    first_l, last_l = safe_str(first).lower(), safe_str(last).lower()
+    for row in read_passes():
+        if safe_str(row.get('First Name')).lower() == first_l and safe_str(row.get('Last Name')).lower() == last_l:
+            if safe_str(row.get('Time Out')) and not safe_str(row.get('Time In')):
+                return True
+    return False
+
+def recent_signout_exists(first: str, last: str, window_seconds: int = 20) -> bool:
+    first_l, last_l = safe_str(first).lower(), safe_str(last).lower()
+    now_local = datetime.now(LOCAL_TZ)
+    for row in read_passes():
+        if safe_str(row.get('First Name')).lower() == first_l and safe_str(row.get('Last Name')).lower() == last_l:
+            ts = safe_str(row.get('Time Out'))
+            if not ts:
+                continue
+            try:
+                t = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=LOCAL_TZ)
+            except ValueError:
+                continue
+            if (now_local - t).total_seconds() <= window_seconds:
+                return True
+    return False
+
 # ---------- ROUTES ----------
 @app.route('/')
 def home():
@@ -454,55 +488,74 @@ def signout():
         if not pin:
             return render_index_error(
                 "Enter the last 4 digits of your Student ID (numbers only).",
-                "pin_required",
-                400
+                "pin_required", 400
             )
         if not check_student_pin(first_name, last_name, pin):
             return render_index_error(
                 "Name and last 4 of Student ID didn’t match our roster.",
-                "pin_mismatch",
-                403
+                "pin_mismatch", 403
             )
 
     # Require text if "Other"
     if reason == "Other" and not other_reason:
         return render_index_error(
             "Please type your reason when selecting ‘Other’.",
-            "other_required",
-            400
+            "other_required", 400
         )
 
-    # --- Capacity guard (uses helper, clearer message) ---
-    passes_all = read_passes()
-    currently_out = [p for p in passes_all if not safe_str(p.get('Time In'))]
-    if len(currently_out) >= HALL_LIMIT:
+    import traceback
+
+    # --- Capacity guard (robust) ---
+    try:
+        passes_all = read_passes() or []
+        currently_out = [p for p in passes_all if not safe_str(p.get('Time In'))]
+        hall_limit = int(HALL_LIMIT)
+        if len(currently_out) >= hall_limit:
+            return render_index_error(
+                f"The hall is at capacity ({hall_limit} students out). Please wait until someone returns.",
+                "capacity", 429  # Too Many Requests
+            )
+    except Exception as cap_e:
+        print("capacity-guard error:", repr(cap_e))
+        print("TRACEBACK:\n", traceback.format_exc())
         return render_index_error(
-            f"The hall is at capacity ({HALL_LIMIT} students out). Please wait until someone returns.",
-            "capacity",
-            429  # Too Many Requests
+            "We couldn’t check hall capacity. Please try again in a moment.",
+            "capacity_check_failed", 500
         )
 
-    # Quarter limit
-    if passes_this_quarter(first_name, last_name) >= MAX_QUARTER_PASSES:
+    # --- Quarter limit (robust) ---
+    try:
+        if passes_this_quarter(first_name, last_name) >= MAX_QUARTER_PASSES:
+            return render_index_error(
+                f"You have used all {MAX_QUARTER_PASSES} passes for this quarter.",
+                "limit_reached", 403
+            )
+    except Exception as limit_e:
+        print("limit-check error:", repr(limit_e))
+        print("TRACEBACK:\n", traceback.format_exc())
         return render_index_error(
-            f"You have used all {MAX_QUARTER_PASSES} passes for this quarter.",
-            "limit_reached",
-            403
+            "We couldn’t verify your quarter pass count. Please try again in a moment.",
+            "limit_check_failed", 500
         )
 
-    # --- Duplicate protection (uses helper) ---
-    if student_has_open_pass(first_name, last_name):
+    # --- Duplicate protection (robust) ---
+    try:
+        if student_has_open_pass(first_name, last_name):
+            return render_index_error(
+                "You’re already signed out. Please sign back in before starting a new pass.",
+                "already_out", 409  # Conflict
+            )
+        if recent_signout_exists(first_name, last_name, window_seconds=20):
+            return render_index_error(
+                "We already received your sign-out. Please wait a few seconds.",
+                "duplicate_click", 202  # Accepted
+            )
+    except Exception as dup_e:
+        print("duplicate-guard error:", repr(dup_e))
+        print("TRACEBACK:\n", traceback.format_exc())
         return render_index_error(
-            "You’re already signed out. Please sign back in before starting a new pass.",
-            "already_out",
-            409  # Conflict
-        )
-
-    if recent_signout_exists(first_name, last_name, window_seconds=20):
-        return render_index_error(
-            "We already received your sign-out. Please wait a few seconds.",
-            "duplicate_click",
-            202  # Accepted
+            "Something went wrong checking your current pass. Please try again, or ask a teacher.",
+            "dup_check_failed", 500
         )
 
     # Write entry (do NOT store the PIN)
@@ -517,7 +570,6 @@ def signout():
     }
 
     # Safe write with detailed logging
-    import traceback
     try:
         write_pass(entry)
         return redirect(url_for('home', name=f"{first_name} {last_name}"))
@@ -526,8 +578,7 @@ def signout():
         print("TRACEBACK:\n", traceback.format_exc())
         return render_index_error(
             "Couldn’t save your pass to the Google Sheet. Please try again in a moment.",
-            "write_failed",
-            502
+            "write_failed", 502
         )
 
 @app.route("/signin", methods=["POST"])

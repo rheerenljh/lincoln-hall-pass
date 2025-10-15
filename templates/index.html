@@ -55,21 +55,49 @@
 
     {# Error area with specific hints based on error_code #}
     {% if error %}
-      <div class="error-banner" role="alert" aria-live="polite">
-        {{ error }}
-        {% if error_code == 'capacity' %}
-          <div><small class="helper">All spots are currently taken. Please try again when someone returns.</small></div>
-        {% elif error_code == 'limit_reached' %}
-          <div><small class="helper">You’ve reached your {{ MAX_QUARTER_PASSES|default(18) }}-pass limit for {{ CURRENT_QUARTER }}. Talk to your teacher if you think this is a mistake.</small></div>
-        {% elif error_code == 'no_quarter' %}
-          <div><small class="helper">Sign-outs resume on the next school day of the new quarter.</small></div>
-        {% elif error_code == 'pin_required' %}
-          <div><small class="helper">Tip: Use digits only (e.g., 0 1 2 3). Include leading zeros.</small></div>
-        {% elif error_code == 'pin_mismatch' %}
-          <div><small class="helper">Check spelling of your first/last name and the last 4 digits (include leading zeros). If it still fails, ask your teacher to verify the roster.</small></div>
-        {% endif %}
-      </div>
+  <div class="error-banner" role="alert" aria-live="polite">
+    {{ error }}
+    {% if error_code == 'capacity' %}
+      <div><small class="helper">All spots are currently taken. Please try again when someone returns.</small></div>
+
+    {% elif error_code == 'capacity_check_failed' %}
+      <div><small class="helper">We couldn’t check hall capacity. Please try again in a moment.</small></div>
+
+    {% elif error_code == 'limit_reached' %}
+      <div><small class="helper">You’ve reached your {{ MAX_QUARTER_PASSES|default(18) }}-pass limit{% if CURRENT_QUARTER %} for {{ CURRENT_QUARTER }}{% endif %}.</small></div>
+
+    {% elif error_code == 'limit_check_failed' %}
+      <div><small class="helper">We couldn’t verify your quarter pass count. Please try again shortly.</small></div>
+
+    {% elif error_code == 'already_out' %}
+      <div><small class="helper">You’re already signed out. Please sign back in before starting a new pass. If this seems wrong, ask a teacher to check the list of students currently out.</small></div>
+
+    {% elif error_code == 'duplicate_click' %}
+      <div><small class="helper">Don’t worry—your pass is saving. Give it a moment.</small></div>
+
+    {% elif error_code == 'dup_check_failed' %}
+      <div><small class="helper">Something went wrong checking your current pass. Please try again.</small></div>
+
+    {% elif error_code == 'pin_required' %}
+      <div><small class="helper">Tip: Use digits only (e.g., 0 1 2 3). Include leading zeros.</small></div>
+
+    {% elif error_code == 'pin_mismatch' %}
+      <div><small class="helper">Check spelling of your first/last name and the last 4 digits (include leading zeros). If it still fails, ask your teacher to verify the roster.</small></div>
+
+    {% elif error_code == 'other_required' %}
+      <div><small class="helper">Please type your reason in the box below.</small></div>
+
+    {% elif error_code == 'name_required' %}
+      <div><small class="helper">Enter both first and last name.</small></div>
+
+    {% elif error_code == 'write_failed' %}
+      <div><small class="helper">Ask a teacher if this keeps happening; the sheet may need access.</small></div>
+
+    {% elif error_code == 'no_quarter' %}
+      <div><small class="helper">Sign-outs resume on the next school day of the new quarter.</small></div>
     {% endif %}
+  </div>
+{% endif %}
 
     {# Student usage status (dynamic colors, dynamic limit) #}
     {% if used_passes is not none %}
