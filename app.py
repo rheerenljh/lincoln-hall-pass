@@ -522,26 +522,26 @@ def signout():
 
         # Basic validation
         if not first_name or not last_name:
-            return render_index_error("First and last name are required.", "name_required", 400)
+            return render_index_error("First and last name are required.", "name_required", 200)
 
         # PIN validation (if enabled)
         if ENABLE_STUDENT_PIN:
             if not pin:
                 return render_index_error(
                     "Enter the last 4 digits of your Student ID (numbers only).",
-                    "pin_required", 400
+                    "pin_required", 200
                 )
             if not check_student_pin(first_name, last_name, pin):
                 return render_index_error(
                     "Name and last 4 of Student ID didn’t match our roster.",
-                    "pin_mismatch", 403
+                    "pin_mismatch", 200
                 )
 
         # Require text if "Other"
         if reason == "Other" and not other_reason:
             return render_index_error(
                 "Please type your reason when selecting ‘Other’.",
-                "other_required", 400
+                "other_required", 200
             )
 
         # --- Capacity guard (robust, logs current/limit) ---
@@ -553,7 +553,7 @@ def signout():
             if len(currently_out) >= hall_limit:
                 return render_index_error(
                     f"The hall is at capacity ({hall_limit} students out). Please wait until someone returns.",
-                    "capacity", 429
+                    "capacity", 200
                 )
         except Exception as cap_e:
             print("capacity-guard error:", repr(cap_e))
@@ -568,7 +568,7 @@ def signout():
             if passes_this_quarter(first_name, last_name) >= MAX_QUARTER_PASSES:
                 return render_index_error(
                     f"You have used all {MAX_QUARTER_PASSES} passes for this quarter.",
-                    "limit_reached", 403
+                    "limit_reached", 200
                 )
         except Exception as limit_e:
             print("limit-check error:", repr(limit_e))
@@ -585,7 +585,7 @@ def signout():
             if open_now:
                 return render_index_error(
                     "You’re already signed out. Please sign back in before starting a new pass.",
-                    "already_out", 409
+                    "already_out", 200
                 )
 
             just_sent = recent_signout_exists(first_name, last_name, window_seconds=20)
@@ -593,7 +593,7 @@ def signout():
             if just_sent:
                 return render_index_error(
                     "We already received your sign-out. Please wait a few seconds.",
-                    "duplicate_click", 202
+                    "duplicate_click", 200
                 )
         except Exception as dup_e:
             print("duplicate-guard error:", repr(dup_e))
