@@ -4,82 +4,88 @@
   <meta charset="utf-8" />
   <title>Lincoln Jr. High Hall Pass</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background-color: #f7f7f7; }
-    header { background-color: #000; padding: 20px; text-align: center; color: white; }
-    header img { max-height: 80px; vertical-align: middle; }
-    h1 { color: #c8102e; margin-top: 10px; }
-    .container { max-width: 600px; background: white; padding: 30px; margin: 30px auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); border-top: 5px solid #c8102e; }
-    form { display: flex; flex-direction: column; }
-    label { margin-top: 15px; font-weight: bold; }
-    input, select { padding: 8px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; }
-    button { margin-top: 20px; padding: 10px; background-color: #c8102e; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
-    button:hover { background-color: #9d0c21; }
-    .sign-in-form { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; }
-    .student-counter { margin-top: 10px; font-weight: bold; }
+<style>
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background-color: #f7f7f7; }
+  header { background-color: #000; padding: 20px; text-align: center; color: white; }
+  header img { max-height: 80px; vertical-align: middle; }
+  h1 { color: #c8102e; margin-top: 10px; }
+  .container { max-width: 600px; background: white; padding: 30px; margin: 30px auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); border-top: 5px solid #c8102e; }
+  form { display: flex; flex-direction: column; }
+  label { margin-top: 15px; font-weight: bold; }
+  input, select { padding: 8px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; }
+  button { margin-top: 20px; padding: 10px; background-color: #c8102e; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+  button:hover { background-color: #9d0c21; }
+  .sign-in-form { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; }
+  .student-counter { margin-top: 10px; font-weight: bold; }
 
-/* --- Enhanced error banner (LOUD) --- */
-.error-banner {
-  background:#ffe2e6;                 /* brighter pink */
-  color:#5b0a12;                      /* darker text for contrast */
-  border:2px solid #f199a3;           /* thicker border */
-  border-left:10px solid #c8102e;     /* thicker attention stripe */
-  padding:18px 18px;
-  border-radius:10px;
-  margin-bottom:22px;
-  font-size:1.25rem;                  /* larger text */
-  line-height:1.4;
-  box-shadow: 0 4px 12px rgba(200,16,46,0.18);
-  outline: none;
-  position: sticky;                   /* stays visible when scrolled */
-  top: 12px;
-  z-index: 10;
-}
-.error-banner:focus { box-shadow: 0 0 0 4px rgba(200,16,46,0.25); }
+  /* --- Enhanced error banner (LOUD) --- */
+  .error-banner {
+    background:#ffe2e6;                 /* brighter pink */
+    color:#5b0a12;                      /* darker text for contrast */
+    border:2px solid #f199a3;           /* thicker border */
+    border-left:10px solid #c8102e;     /* thicker attention stripe */
+    padding:18px 18px;
+    border-radius:10px;
+    margin-bottom:22px;
+    font-size:1.25rem;                  /* larger text */
+    line-height:1.4;
+    box-shadow: 0 4px 12px rgba(200,16,46,0.18);
+    outline: none;
+    position: sticky;                   /* stays visible when scrolled */
+    top: 12px;
+    z-index: 10;
+  }
+  .error-banner:focus { box-shadow: 0 0 0 4px rgba(200,16,46,0.25); }
 
-.error-title {
-  display:flex;
-  align-items:center;
-  gap:10px;
-  font-weight:900;                    /* extra bold */
-  font-size: 1.35rem;                 /* larger headline */
-  letter-spacing: .2px;
-  margin-bottom:8px;
-}
+  .error-title {
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-weight:900;                    /* extra bold */
+    font-size: 1.35rem;                 /* larger headline */
+    letter-spacing: .2px;
+    margin-bottom:8px;
+  }
 
-.error-actions {
-  margin-top:14px;
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px;
-}
+  .error-actions {
+    margin-top:14px;
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+  }
 
-/* Buttons in error actions (slightly bolder) */
-.button {
-  display:inline-block;
-  padding:12px 16px;
-  border-radius:8px;
-  text-decoration:none;
-  font-weight:700;
-  border:2px solid transparent;
-}
-.button-primary { background:#c8102e; color:#fff; }
-.button-primary:hover { background:#9d0c21; }
-.button-ghost { background:#fff; color:#c8102e; border-color:#c8102e; }
-.button-ghost:hover { background:#ffeeef; }
+  /* Make helper lines inside the banner larger & darker */
+  .error-banner small.helper {
+    font-size: 1.1rem;
+    color: #2b2b2b;
+  }
 
-/* Helper text slightly larger & darker for readability */
-small.helper {
-  color:#333;
-  margin-top:6px;
-  display:block;
-  font-size:.95rem;
-}
+  /* Buttons in error actions (slightly bolder) */
+  .button {
+    display:inline-block;
+    padding:12px 16px;
+    border-radius:8px;
+    text-decoration:none;
+    font-weight:700;
+    border:2px solid transparent;
+  }
+  .button-primary { background:#c8102e; color:#fff; }
+  .button-primary:hover { background:#9d0c21; }
+  .button-ghost { background:#fff; color:#c8102e; border-color:#c8102e; }
+  .button-ghost:hover { background:#ffeeef; }
 
-    .notice { background:#eef6ff; color:#123; border:1px solid #b7d0ff; padding:10px 12px; border-radius:4px; margin-bottom:15px; }
-    small.helper { color:#555; margin-top:4px; display:block; }
-    .sr-only { position:absolute; left:-10000px; top:auto; width:1px; height:1px; overflow:hidden; }
-  </style>
+  .notice { background:#eef6ff; color:#123; border:1px solid #b7d0ff; padding:10px 12px; border-radius:4px; margin-bottom:15px; }
+
+  /* Base helper text (used outside the banner) */
+  small.helper {
+    color:#555;
+    margin-top:6px;
+    display:block;
+    font-size:.95rem;
+  }
+
+  .sr-only { position:absolute; left:-10000px; top:auto; width:1px; height:1px; overflow:hidden; }
+</style>
 
   <script>
     function toggleOtherReason() {
