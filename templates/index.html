@@ -157,6 +157,22 @@
   </div>
 {% endif %}
 
+{# Student usage status (dynamic colors, dynamic limit) #}
+{% if used_passes is not none %}
+  {% set maxp = MAX_QUARTER_PASSES|default(18) %}
+  {% set color = 'green' %}
+  {% if used_passes >= (maxp * 2) // 3 %}
+    {% set color = 'red' %}
+  {% elif used_passes >= maxp // 3 %}
+    {% set color = 'orange' %}
+  {% endif %}
+  <p class="student-counter">
+    Hello, {{ name }}! You have used
+    <span style="color: {{ color }};">{{ used_passes }}</span>
+    of {{ maxp }} passes this quarter{% if CURRENT_QUARTER and CURRENT_QUARTER != 'Unknown' %} ({{ CURRENT_QUARTER }}){% endif %}.
+  </p>
+{% endif %}
+
     <!-- SIGN OUT -->
     <form id="signout-form" method="POST" action="{{ url_for('signout') }}" novalidate>
       <label for="first_name">First Name:</label>
