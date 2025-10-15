@@ -492,122 +492,130 @@ def home():
 
 @app.route('/signout', methods=['POST'])
 def signout():
-    first_name   = request.form.get('first_name', '').strip()
-    last_name    = request.form.get('last_name', '').strip()
-    pin          = request.form.get('pin', '').strip()
-    period       = request.form.get('period', '').strip()
-    teacher      = request.form.get('teacher', '').strip()
-    reason       = request.form.get('reason', '').strip()
-    other_reason = request.form.get('other_reason', '').strip()
-    final_reason = other_reason if (reason == "Other" and other_reason) else reason
-    time_out     = now_str()
-
-    # Basic validation
-    if not first_name or not last_name:
-        return render_index_error("First and last name are required.", "name_required", 400)
-
-    # PIN validation (if enabled)
-    if ENABLE_STUDENT_PIN:
-        if not pin:
-            return render_index_error(
-                "Enter the last 4 digits of your Student ID (numbers only).",
-                "pin_required", 400
-            )
-        if not check_student_pin(first_name, last_name, pin):
-            return render_index_error(
-                "Name and last 4 of Student ID didn’t match our roster.",
-                "pin_mismatch", 403
-            )
-
-    # Require text if "Other"
-    if reason == "Other" and not other_reason:
-        return render_index_error(
-            "Please type your reason when selecting ‘Other’.",
-            "other_required", 400
-        )
-
     import traceback
-
-    # --- Capacity guard (robust, logs current/limit) ---
     try:
-        passes_all = read_passes() or []
-        currently_out = [p for p in passes_all if not safe_str(p.get('Time In'))]
-        hall_limit = int(HALL_LIMIT)
-        print(f"[capacity] out={len(currently_out)} limit={hall_limit}")  # DEBUG LOG
-        if len(currently_out) >= hall_limit:
-            return render_index_error(
-                f"The hall is at capacity ({hall_limit} students out). Please wait until someone returns.",
-                "capacity", 429  # Too Many Requests
-            )
-    except Exception as cap_e:
-        print("capacity-guard error:", repr(cap_e))
-        print("TRACEBACK:\n", traceback.format_exc())
-        return render_index_error(
-            "We couldn’t check hall capacity. Please try again in a moment.",
-            "capacity_check_failed", 500
-        )
+        first_name   = request.form.get('first_name', '').strip()
+        last_name    = request.form.get('last_name', '').strip()
+        pin          = request.form.get('pin', '').strip()
+        period       = request.form.get('period', '').strip()
+        teacher      = request.form.get('teacher', '').strip()
+        reason       = request.form.get('reason', '').strip()
+        other_reason = request.form.get('other_reason', '').strip()
+        final_reason = other_reason if (reason == "Other" and other_reason) else reason
+        time_out     = now_str()
 
-    # --- Quarter limit (robust) ---
-    try:
-        if passes_this_quarter(first_name, last_name) >= MAX_QUARTER_PASSES:
-            return render_index_error(
-                f"You have used all {MAX_QUARTER_PASSES} passes for this quarter.",
-                "limit_reached", 403
-            )
-    except Exception as limit_e:
-        print("limit-check error:", repr(limit_e))
-        print("TRACEBACK:\n", traceback.format_exc())
-        return render_index_error(
-            "We couldn’t verify your quarter pass count. Please try again in a moment.",
-            "limit_check_failed", 500
-        )
+        # Basic validation
+        if not first_name or not last_name:
+            return render_index_error("First and last name are required.", "name_required", 400)
 
-    # --- Duplicate protection (robust; belt-and-suspenders logging) ---
-    try:
-        open_now = student_has_open_pass(first_name, last_name)
-        print(f"[dup] student_has_open_pass('{first_name} {last_name}') -> {open_now}")
-        if open_now:
+        # PIN validation (if enabled)
+        if ENABLE_STUDENT_PIN:
+            if not pin:
+                return render_index_error(
+                    "Enter the last 4 digits of your Student ID (numbers only).",
+                    "pin_required", 400
+                )
+            if not check_student_pin(first_name, last_name, pin):
+                return render_index_error(
+                    "Name and last 4 of Student ID didn’t match our roster.",
+                    "pin_mismatch", 403
+                )
+
+        # Require text if "Other"
+        if reason == "Other" and not other_reason:
             return render_index_error(
-                "You’re already signed out. Please sign back in before starting a new pass.",
-                "already_out", 409  # Conflict
+                "Please type your reason when selecting ‘Other’.",
+                "other_required", 400
             )
 
-        just_sent = recent_signout_exists(first_name, last_name, window_seconds=20)
-        print(f"[dup] recent_signout_exists('{first_name} {last_name}') -> {just_sent}")
-        if just_sent:
+        # --- Capacity guard (robust, logs current/limit) ---
+        try:
+            passes_all = read_passes() or []
+            currently_out = [p for p in passes_all if not safe_str(p.get('Time In'))]
+            hall_limit = int(HALL_LIMIT)
+            print(f"[capacity] out={len(currently_out)} limit={hall_limit}")
+            if len(currently_out) >= hall_limit:
+                return render_index_error(
+                    f"The hall is at capacity ({hall_limit} students out). Please wait until someone returns.",
+                    "capacity", 429
+                )
+        except Exception as cap_e:
+            print("capacity-guard error:", repr(cap_e))
+            print("TRACEBACK:\n", traceback.format_exc())
             return render_index_error(
-                "We already received your sign-out. Please wait a few seconds.",
-                "duplicate_click", 202  # Accepted
+                "We couldn’t check hall capacity. Please try again in a moment.",
+                "capacity_check_failed", 500
             )
-    except Exception as dup_e:
-        print("duplicate-guard error:", repr(dup_e))
-        print("TRACEBACK:\n", traceback.format_exc())
-        return render_index_error(
-            "Something went wrong checking your current pass. Please try again, or ask a teacher.",
-            "dup_check_failed", 500
-        )
 
-    # Write entry (do NOT store the PIN)
-    entry = {
-        'First Name': first_name,
-        'Last Name': last_name,
-        'Period': period,
-        'Teacher': teacher,
-        'Reason': final_reason,
-        'Time Out': time_out,
-        'Time In': ''
-    }
+        # --- Quarter limit (robust) ---
+        try:
+            if passes_this_quarter(first_name, last_name) >= MAX_QUARTER_PASSES:
+                return render_index_error(
+                    f"You have used all {MAX_QUARTER_PASSES} passes for this quarter.",
+                    "limit_reached", 403
+                )
+        except Exception as limit_e:
+            print("limit-check error:", repr(limit_e))
+            print("TRACEBACK:\n", traceback.format_exc())
+            return render_index_error(
+                "We couldn’t verify your quarter pass count. Please try again in a moment.",
+                "limit_check_failed", 500
+            )
 
-    # Safe write with detailed logging
-    try:
-        write_pass(entry)
-        return redirect(url_for('home', name=f"{first_name} {last_name}"))
+        # --- Duplicate protection (robust; logs results) ---
+        try:
+            open_now = student_has_open_pass(first_name, last_name)
+            print(f"[dup] student_has_open_pass('{first_name} {last_name}') -> {open_now}")
+            if open_now:
+                return render_index_error(
+                    "You’re already signed out. Please sign back in before starting a new pass.",
+                    "already_out", 409
+                )
+
+            just_sent = recent_signout_exists(first_name, last_name, window_seconds=20)
+            print(f"[dup] recent_signout_exists('{first_name} {last_name}') -> {just_sent}")
+            if just_sent:
+                return render_index_error(
+                    "We already received your sign-out. Please wait a few seconds.",
+                    "duplicate_click", 202
+                )
+        except Exception as dup_e:
+            print("duplicate-guard error:", repr(dup_e))
+            print("TRACEBACK:\n", traceback.format_exc())
+            return render_index_error(
+                "Something went wrong checking your current pass. Please try again, or ask a teacher.",
+                "dup_check_failed", 500
+            )
+
+        # Write entry (do NOT store the PIN)
+        entry = {
+            'First Name': first_name,
+            'Last Name': last_name,
+            'Period': period,
+            'Teacher': teacher,
+            'Reason': final_reason,
+            'Time Out': time_out,
+            'Time In': ''
+        }
+
+        try:
+            write_pass(entry)
+            return redirect(url_for('home', name=f"{first_name} {last_name}"))
+        except Exception as e:
+            print("write_pass error:", repr(e))
+            print("TRACEBACK:\n", traceback.format_exc())
+            return render_index_error(
+                "Couldn’t save your pass to the Google Sheet. Please try again in a moment.",
+                "write_failed", 502
+            )
+
     except Exception as e:
-        print("write_pass error:", repr(e))
+        # FINAL CATCH-ALL: no more generic 500s
+        print("signout unhandled error:", repr(e))
         print("TRACEBACK:\n", traceback.format_exc())
         return render_index_error(
-            "Couldn’t save your pass to the Google Sheet. Please try again in a moment.",
-            "write_failed", 502
+            "Something went wrong processing your pass. Please try again, or ask a teacher.",
+            "unhandled", 500
         )
 
 @app.route("/signin", methods=["POST"])
@@ -751,5 +759,15 @@ def diag():
         return f"Sheets error: {type(e).__name__}: {e}", 500
 
 # ---------- RUN ----------
+@app.errorhandler(500)
+def handle_500(e):
+    import traceback
+    print("Unhandled 500:", repr(e))
+    print("TRACEBACK:\n", traceback.format_exc())
+    return render_index_error(
+        "Something went wrong saving your pass. Please try again, or ask a teacher.",
+        "write_failed", 500
+    )
+
 if __name__ == '__main__':
     app.run(debug=True)
