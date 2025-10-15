@@ -477,6 +477,41 @@ def recent_signout_exists(first: str, last: str, window_seconds: int = 20) -> bo
                 return True
     return False
 
+def render_index_error(error_msg: str, error_code: str, status: int = 400):
+    """Re-render the index with an error banner (big + styled)."""
+    # rebuild the options the form needs
+    first_names, last_names, _ = get_roster_name_lists()
+
+    # Optional: keep the pass counter visible after an error
+    name = None
+    used_passes = None
+    # you can’t reliably infer the full name here without both parts,
+    # but if you want, you can use request.form to populate it:
+    fn = safe_str(request.form.get("first_name"))
+    ln = safe_str(request.form.get("last_name"))
+    if fn and ln:
+        name = f"{fn} {ln}"
+        try:
+            used_passes = passes_this_quarter(fn, ln)
+        except Exception:
+            used_passes = None  # don’t break the error render
+
+    return (
+        render_template(
+            "index.html",
+            error=error_msg,
+            error_code=error_code,
+            teachers=TEACHERS,
+            reasons=REASONS,
+            periods=PERIODS,
+            first_name_options=first_names,
+            last_name_options=last_names,
+            name=name,
+            used_passes=used_passes,
+        ),
+        status,
+    )
+
 # ---------- ROUTES ----------
 @app.route('/')
 def home():
