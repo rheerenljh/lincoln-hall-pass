@@ -404,7 +404,7 @@ def auto_close_stale_passes(max_minutes: int = 30) -> int:
         print(f"auto_close_stale_passes error: {e}")
         return 0
 
-    def render_index_error(error_msg: str, error_code: str, status: int = 400):
+def render_index_error(error_msg: str, error_code: str, status: int = 400):
     first_names, last_names, _ = get_roster_name_lists()
     return render_template(
         "index.html",
