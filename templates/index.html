@@ -108,6 +108,11 @@
 
   <div class="container">
 
+    {# ---- Defensive defaults so the page renders even if context is missing ---- #}
+{% set _CURRENT_QUARTER = CURRENT_QUARTER|default('Unknown') %}
+{% set _MAX_PASSES      = MAX_QUARTER_PASSES|default(18) %}
+{% set _PIN_ENABLED     = ENABLE_STUDENT_PIN|default(0) %}
+
     {# Quarter / limit context from context_processor #}
     {% if CURRENT_QUARTER %}
       <div class="notice">
