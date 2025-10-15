@@ -216,9 +216,6 @@ except Exception as e:
             return []
     sheet = _SheetFallback()
 
-# Global handle used everywhere else in your code
-sheet = _get_or_create_pass_sheet()
-
 # ---------- ROSTER LOADING ----------
 def load_roster_from_csv(path: str):
     """CSV columns: First Name, Last Name, Student ID (used as PIN)."""
@@ -346,29 +343,6 @@ def recent_signout_exists(first: str, last: str, window_seconds: int = 20) -> bo
         # Fail safe (assume not recent to avoid blocking)
         return False
 
-def render_index_error(error_msg: str, error_code: str, status: int = 400):
-    # Always build name options so users can try again immediately
-    first_names, last_names, _ = get_roster_name_lists()
-    qname, _, _ = _active_quarter_dt()
-    return render_template(
-        "index.html",
-        error=error_msg,
-        error_code=error_code,
-        # Required UI lists
-        teachers=TEACHERS,
-        reasons=REASONS,
-        periods=PERIODS,
-        first_name_options=first_names,
-        last_name_options=last_names,
-        # Quarter/pin context the template expects
-        CURRENT_QUARTER=qname,
-        MAX_QUARTER_PASSES=MAX_QUARTER_PASSES,
-        ENABLE_STUDENT_PIN=ENABLE_STUDENT_PIN,
-        # These are optional on error
-        name=None,
-        used_passes=None,
-    ), status
-
 def read_passes():
     records = sheet.get_all_records()
     return [row for row in records if any(row.values())]
@@ -449,65 +423,13 @@ def auto_close_stale_passes(max_minutes: int = 30) -> int:
         return 0
 
 def render_index_error(error_msg: str, error_code: str, status: int = 400):
-    """Render index.html with a consistent context + HTTP status, never 500s."""
-    # Try to load roster options; if Sheets flakes, fail open with empty lists
-    try:
-        first_names, last_names, _ = get_roster_name_lists()
-    except Exception as e:
-        import traceback
-        print("error page roster load failed:", repr(e))
-        print("TRACEBACK:\n", traceback.format_exc())
-        first_names, last_names = [], []
-
-    # Try to render the template; if that somehow fails, return plain text
-    try:
-        return render_template(
-            "index.html",
-            error=error_msg,
-            error_code=error_code,
-            teachers=TEACHERS, reasons=REASONS, periods=PERIODS,
-            first_name_options=first_names, last_name_options=last_names
-        ), status
-    except Exception as e:
-        import traceback
-        print("render_template(index.html) failed:", repr(e))
-        print("TRACEBACK:\n", traceback.format_exc())
-        return f"{error_msg}", status
-
-def student_has_open_pass(first: str, last: str) -> bool:
-    first_l, last_l = safe_str(first).lower(), safe_str(last).lower()
-    for row in read_passes():
-        if safe_str(row.get('First Name')).lower() == first_l and safe_str(row.get('Last Name')).lower() == last_l:
-            if safe_str(row.get('Time Out')) and not safe_str(row.get('Time In')):
-                return True
-    return False
-
-def recent_signout_exists(first: str, last: str, window_seconds: int = 20) -> bool:
-    first_l, last_l = safe_str(first).lower(), safe_str(last).lower()
-    now_local = datetime.now(LOCAL_TZ)
-    for row in read_passes():
-        if safe_str(row.get('First Name')).lower() == first_l and safe_str(row.get('Last Name')).lower() == last_l:
-            ts = safe_str(row.get('Time Out'))
-            if not ts:
-                continue
-            try:
-                t = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=LOCAL_TZ)
-            except ValueError:
-                continue
-            if (now_local - t).total_seconds() <= window_seconds:
-                return True
-    return False
-
-def render_index_error(error_msg: str, error_code: str, status: int = 400):
-    """Re-render the index with an error banner (big + styled)."""
-    # rebuild the options the form needs
+    """Re-render the index with an error banner (big + styled), no 500s."""
+    # Build the options the form needs
     first_names, last_names, _ = get_roster_name_lists()
 
-    # Optional: keep the pass counter visible after an error
+    # Keep the pass counter visible after an error if we have both names
     name = None
     used_passes = None
-    # you can’t reliably infer the full name here without both parts,
-    # but if you want, you can use request.form to populate it:
     fn = safe_str(request.form.get("first_name"))
     ln = safe_str(request.form.get("last_name"))
     if fn and ln:
@@ -515,7 +437,7 @@ def render_index_error(error_msg: str, error_code: str, status: int = 400):
         try:
             used_passes = passes_this_quarter(fn, ln)
         except Exception:
-            used_passes = None  # don’t break the error render
+            used_passes = None  # never block the error page
 
     return (
         render_template(
