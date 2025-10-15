@@ -190,18 +190,20 @@
       </datalist>
 
       {% if ENABLE_STUDENT_PIN %}
-        <label for="pin_out">Student ID (last 4):</label>
-        <input
-          type="text"
-          id="pin_out"
-          name="pin"
-          maxlength="4"
-          pattern="\d{4}"
-          inputmode="numeric"
-          autocomplete="off"
-          required
-        >
-        <small class="helper">Enter exactly 4 digits. If your ID starts with 0, include the 0.</small>
+       <label for="pin_out">Student ID (last 4):</label>
+      <input
+        type="text"
+        id="pin_out"
+        name="pin"
+        maxlength="4"
+        pattern="\d{4}"
+        inputmode="numeric"
+        autocomplete="off"
+        aria-describedby="pin_help"
+        required
+      >
+<small class="helper" id="pin_help">Enter exactly 4 digits. If your ID starts with 0, include the 0.</small>
+
       {% else %}
         <span class="sr-only">PIN disabled</span>
       {% endif %}
@@ -258,21 +260,21 @@
   <!-- ...your page content... -->
 
   <!-- Prevent double-submit on Sign Out -->
-  <script>
-    (function () {
-      const form = document.querySelector('form[action="{{ url_for("signout") }}"]');
-      if (!form) return;
-      const btn = form.querySelector('button[type="submit"]');
+<script>
+  (function () {
+    const form = document.getElementById('signout-form');
+    if (!form) return;
+    const btn = form.querySelector('button[type="submit"]');
 
-      form.addEventListener('submit', function (e) {
-        if (btn.dataset.locked === '1') { e.preventDefault(); return false; }
-        btn.dataset.locked = '1';
-        btn.disabled = true;
-        btn.setAttribute('aria-busy', 'true');
-        btn.textContent = 'Processing… please wait';
-      });
-    })();
-  </script>
+    form.addEventListener('submit', function (e) {
+      if (btn.dataset.locked === '1') { e.preventDefault(); return false; }
+      btn.dataset.locked = '1';
+      btn.disabled = true;
+      btn.setAttribute('aria-busy', 'true');
+      btn.textContent = 'Processing… please wait';
+    });
+  })();
+</script>
 
   <!-- Bring error banner into view & add focus; help buttons jump to form -->
   <script>
