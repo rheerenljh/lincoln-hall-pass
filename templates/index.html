@@ -4,24 +4,75 @@
   <meta charset="utf-8" />
   <title>Lincoln Jr. High Hall Pass</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background-color: #f7f7f7; }
-    header { background-color: #000; padding: 20px; text-align: center; color: white; }
-    header img { max-height: 80px; vertical-align: middle; }
-    h1 { color: #c8102e; margin-top: 10px; }
-    .container { max-width: 600px; background: white; padding: 30px; margin: 30px auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); border-top: 5px solid #c8102e; }
-    form { display: flex; flex-direction: column; }
-    label { margin-top: 15px; font-weight: bold; }
-    input, select { padding: 8px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; }
-    button { margin-top: 20px; padding: 10px; background-color: #c8102e; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
-    button:hover { background-color: #9d0c21; }
-    .sign-in-form { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; }
-    .student-counter { margin-top: 10px; font-weight: bold; }
-    .error-banner { background:#ffe5e7; color:#9d0c21; border:1px solid #f3b3b8; padding:10px 12px; border-radius:4px; margin-bottom:15px; }
-    .notice { background:#eef6ff; color:#123; border:1px solid #b7d0ff; padding:10px 12px; border-radius:4px; margin-bottom:15px; }
-    small.helper { color:#555; margin-top:4px; }
-    .sr-only { position:absolute; left:-10000px; top:auto; width:1px; height:1px; overflow:hidden; }
-  </style>
+ <style>
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background-color: #f7f7f7; }
+  header { background-color: #000; padding: 20px; text-align: center; color: white; }
+  header img { max-height: 80px; vertical-align: middle; }
+  h1 { color: #c8102e; margin-top: 10px; }
+  .container { max-width: 600px; background: white; padding: 30px; margin: 30px auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); border-top: 5px solid #c8102e; }
+  form { display: flex; flex-direction: column; }
+  label { margin-top: 15px; font-weight: bold; }
+  input, select { padding: 8px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; }
+  button { margin-top: 20px; padding: 10px; background-color: #c8102e; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+  button:hover { background-color: #9d0c21; }
+  .sign-in-form { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; }
+  .student-counter { margin-top: 10px; font-weight: bold; }
+
+  /* --- Enhanced error banner --- */
+  .error-banner {
+    background:#ffe5e7;
+    color:#6b0f1a;
+    border:1px solid #f3b3b8;
+    border-left:6px solid #c8102e;  /* attention stripe */
+    padding:14px 16px;
+    border-radius:6px;
+    margin-bottom:18px;
+    font-size:1.1rem;               /* larger text */
+    line-height:1.35;
+    box-shadow: 0 2px 6px rgba(200,16,46,0.08);
+    outline: none;
+  }
+  .error-banner:focus { box-shadow: 0 0 0 3px rgba(200,16,46,0.2); }
+  .error-banner .error-title {
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-weight:800;                 /* bold headline */
+    margin-bottom:6px;
+  }
+  .error-actions {
+    margin-top:12px;
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+
+  /* --- Buttons for error actions --- */
+  .button {
+    display:inline-block;
+    padding:10px 14px;
+    border-radius:6px;
+    text-decoration:none;
+    font-weight:600;
+    border:1px solid transparent;
+    transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .button-primary {
+    background:#c8102e;
+    color:#fff;
+  }
+  .button-primary:hover { background:#9d0c21; }
+  .button-ghost {
+    background:#fff;
+    color:#c8102e;
+    border-color:#c8102e;
+  }
+  .button-ghost:hover { background:#ffeeef; }
+
+  .notice { background:#eef6ff; color:#123; border:1px solid #b7d0ff; padding:10px 12px; border-radius:4px; margin-bottom:15px; }
+  small.helper { color:#555; margin-top:4px; }
+  .sr-only { position:absolute; left:-10000px; top:auto; width:1px; height:1px; overflow:hidden; }
+</style>
   <script>
     function toggleOtherReason() {
       const reasonDropdown = document.getElementById("reason");
@@ -55,8 +106,10 @@
 
     {# Error area with specific hints based on error_code #}
     {% if error %}
-  <div class="error-banner" role="alert" aria-live="polite">
-    {{ error }}
+      <div class="error-banner" role="alert" aria-live="polite" tabindex="-1" id="error-banner">
+      <div class="error-title">⚠️ {{ error }}</div>
+
+    {# Specific hints by error_code #}
     {% if error_code == 'capacity' %}
       <div><small class="helper">All spots are currently taken. Please try again when someone returns.</small></div>
 
@@ -96,27 +149,16 @@
     {% elif error_code == 'no_quarter' %}
       <div><small class="helper">Sign-outs resume on the next school day of the new quarter.</small></div>
     {% endif %}
+
+    <div class="error-actions">
+      <a class="button button-primary" href="#signout-form">Back to Sign Out</a>
+      <a class="button button-ghost" href="#name">Go to Sign In</a>
+    </div>
   </div>
 {% endif %}
 
-    {# Student usage status (dynamic colors, dynamic limit) #}
-    {% if used_passes is not none %}
-      {% set maxp = MAX_QUARTER_PASSES|default(18) %}
-      {% set color = 'green' %}
-      {% if used_passes >= (maxp * 2) // 3 %}
-        {% set color = 'red' %}
-      {% elif used_passes >= maxp // 3 %}
-        {% set color = 'orange' %}
-      {% endif %}
-      <p class="student-counter">
-        Hello, {{ name }}! You have used
-        <span style="color: {{ color }};">{{ used_passes }}</span>
-        of {{ maxp }} passes this quarter{% if CURRENT_QUARTER and CURRENT_QUARTER != 'Unknown' %} ({{ CURRENT_QUARTER }}){% endif %}.
-      </p>
-    {% endif %}
-
     <!-- SIGN OUT -->
-    <form method="POST" action="{{ url_for('signout') }}" novalidate>
+    <form id="signout-form" method="POST" action="{{ url_for('signout') }}" novalidate>
       <label for="first_name">First Name:</label>
       <input
         type="text"
@@ -230,6 +272,28 @@
         btn.textContent = 'Processing… please wait';
       });
     })();
+  </script>
+
+  <!-- Bring error banner into view & add focus; help buttons jump to form -->
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      // If there is an error banner, bring it into view and focus it
+      const banner = document.getElementById('error-banner');
+      if (banner) {
+        banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        banner.focus({ preventScroll: true });
+      }
+
+      // When "Back to Sign Out" is clicked, focus the First Name field
+      document.querySelectorAll('a[href="#signout-form"]').forEach(link => {
+        link.addEventListener('click', () => {
+          setTimeout(() => {
+            const first = document.getElementById('first_name');
+            if (first) first.focus();
+          }, 50);
+        });
+      });
+    });
   </script>
 </body>
 </html>
