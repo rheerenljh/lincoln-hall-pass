@@ -289,30 +289,53 @@ PERIODS = ["Advisory/STORM", "Period 2", "Period 3", "Period 4", "Period 5", "Pe
 
 # ---------- HELPERS ----------
 def student_has_open_pass(first: str, last: str) -> bool:
-    """True if this student already has a row with Time Out set and empty Time In."""
-    first_l, last_l = safe_str(first).lower(), safe_str(last).lower()
-    for row in read_passes():
-        if safe_str(row.get('First Name')).lower() == first_l and safe_str(row.get('Last Name')).lower() == last_l:
-            if safe_str(row.get('Time Out')) and not safe_str(row.get('Time In')):
+    """True if the student has a row with Time Out set and Time In empty."""
+    try:
+        first_l, last_l = safe_str(first).lower(), safe_str(last).lower()
+        for row in (read_passes() or []):
+            fn = safe_str(row.get('First Name')).lower()
+            ln = safe_str(row.get('Last Name')).lower()
+            tout = safe_str(row.get('Time Out'))
+            tin  = safe_str(row.get('Time In'))
+            if fn == first_l and ln == last_l and tout and not tin:
                 return True
-    return False
+        return False
+    except Exception as e:
+        import traceback
+        print("student_has_open_pass error:", repr(e))
+        print("TRACEBACK:\n", traceback.format_exc())
+        # Fail safe (assume not open so we don't block sign-out due to an error)
+        return False
 
 def recent_signout_exists(first: str, last: str, window_seconds: int = 20) -> bool:
-    """True if a sign-out for this student was recorded within the last N seconds."""
-    first_l, last_l = safe_str(first).lower(), safe_str(last).lower()
-    now_local = datetime.now(LOCAL_TZ)
-    for row in read_passes():
-        if safe_str(row.get('First Name')).lower() == first_l and safe_str(row.get('Last Name')).lower() == last_l:
+    """True if a sign-out for this student was written within the last N seconds."""
+    try:
+        first_l, last_l = safe_str(first).lower(), safe_str(last).lower()
+        now_local = datetime.now(LOCAL_TZ)
+        for row in (read_passes() or []):
+            fn = safe_str(row.get('First Name')).lower()
+            ln = safe_str(row.get('Last Name')).lower()
+            if fn != first_l or ln != last_l:
+                continue
             ts = safe_str(row.get('Time Out'))
             if not ts:
                 continue
             try:
-                t = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=LOCAL_TZ)
+                t = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
             except ValueError:
+                # Skip unexpected formats
                 continue
+            # interpret stored naive time as local
+            t = t.replace(tzinfo=LOCAL_TZ)
             if (now_local - t).total_seconds() <= window_seconds:
                 return True
-    return False
+        return False
+    except Exception as e:
+        import traceback
+        print("recent_signout_exists error:", repr(e))
+        print("TRACEBACK:\n", traceback.format_exc())
+        # Fail safe (assume not recent to avoid blocking)
+        return False
 
 def render_index_error(error_msg: str, error_code: str, status: int = 400):
     # Always pass the same context the template expects
@@ -505,11 +528,12 @@ def signout():
 
     import traceback
 
-    # --- Capacity guard (robust) ---
+    # --- Capacity guard (robust, logs current/limit) ---
     try:
         passes_all = read_passes() or []
         currently_out = [p for p in passes_all if not safe_str(p.get('Time In'))]
         hall_limit = int(HALL_LIMIT)
+        print(f"[capacity] out={len(currently_out)} limit={hall_limit}")  # DEBUG LOG
         if len(currently_out) >= hall_limit:
             return render_index_error(
                 f"The hall is at capacity ({hall_limit} students out). Please wait until someone returns.",
@@ -538,14 +562,19 @@ def signout():
             "limit_check_failed", 500
         )
 
-    # --- Duplicate protection (robust) ---
+    # --- Duplicate protection (robust; belt-and-suspenders logging) ---
     try:
-        if student_has_open_pass(first_name, last_name):
+        open_now = student_has_open_pass(first_name, last_name)
+        print(f"[dup] student_has_open_pass('{first_name} {last_name}') -> {open_now}")
+        if open_now:
             return render_index_error(
                 "You’re already signed out. Please sign back in before starting a new pass.",
                 "already_out", 409  # Conflict
             )
-        if recent_signout_exists(first_name, last_name, window_seconds=20):
+
+        just_sent = recent_signout_exists(first_name, last_name, window_seconds=20)
+        print(f"[dup] recent_signout_exists('{first_name} {last_name}') -> {just_sent}")
+        if just_sent:
             return render_index_error(
                 "We already received your sign-out. Please wait a few seconds.",
                 "duplicate_click", 202  # Accepted
