@@ -125,22 +125,27 @@
   {% endif %}
 
   {# Error area with specific hints based on error_code (NO buttons) #}
-  {% if error %}
-    <div class="error-banner" role="alert" aria-live="polite" tabindex="-1" id="error-banner">
-      <div class="error-title">⚠️ {{ error }}</div>
+{% if error %}
+  <div class="error-banner" role="alert" aria-live="polite" tabindex="-1" id="error-banner">
+    <div class="error-title">⚠️ {{ error }}</div>
 
+    {# If the route provided a specific detail, show that and stop. #}
+    {% if error_detail %}
+      <div><small class="helper">{{ error_detail }}</small></div>
+    {% else %}
+      {# Otherwise, fall back to your per-code helper lines. #}
       {% if error_code == 'capacity' %}
         <div><small class="helper">All spots are currently taken. Please try again when someone returns.</small></div>
       {% elif error_code == 'capacity_check_failed' %}
         <div><small class="helper">We couldn’t check hall capacity. Please try again in a moment.</small></div>
       {% elif error_code == 'limit_reached' %}
-        <div><small class="helper">You’ve reached your {{ _MAX_PASSES }}-pass limit{% if _CURRENT_QUARTER %} for {{ _CURRENT_QUARTER }}{% endif %}.</small></div>
+        <div><small class="helper">You’ve reached your {{ MAX_QUARTER_PASSES|default(18) }}-pass limit{% if CURRENT_QUARTER %} for {{ CURRENT_QUARTER }}{% endif %}.</small></div>
       {% elif error_code == 'limit_check_failed' %}
         <div><small class="helper">We couldn’t verify your quarter pass count. Please try again shortly.</small></div>
       {% elif error_code == 'already_out' %}
-        <div><small class="helper">You’re already signed out. Please sign back in before starting a new pass.</small></div>
+        <div><small class="helper">Please sign back in before starting a new pass.</small></div>
       {% elif error_code == 'duplicate_click' %}
-        <div><small class="helper">Don’t worry—your pass is saving. Give it a moment.</small></div>
+        <div><small class="helper">Please wait a few seconds.</small></div>
       {% elif error_code == 'dup_check_failed' %}
         <div><small class="helper">Something went wrong checking your current pass. Please try again.</small></div>
       {% elif error_code == 'pin_required' %}
@@ -156,8 +161,9 @@
       {% elif error_code == 'no_quarter' %}
         <div><small class="helper">Sign-outs resume on the next school day of the new quarter.</small></div>
       {% endif %}
-    </div>
-  {% endif %}
+    {% endif %}
+  </div>
+{% endif %}
 
   {# Student usage status (keep below the error banner) #}
   {% if used_passes is not none %}

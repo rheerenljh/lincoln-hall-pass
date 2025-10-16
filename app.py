@@ -422,12 +422,15 @@ def auto_close_stale_passes(max_minutes: int = 30) -> int:
         print(f"auto_close_stale_passes error: {e}")
         return 0
 
-def render_index_error(error_msg: str, error_code: str, status: int = 400):
-    """Re-render the index with an error banner (big + styled), no 500s."""
+def render_index_error(error_msg: str, error_code: str, status: int = 400, error_detail: str | None = None):
+    """Re-render the index with a big in-page error banner (no 500s)."""
     # Build the options the form needs
-    first_names, last_names, _ = get_roster_name_lists()
+    try:
+        first_names, last_names, _ = get_roster_name_lists()
+    except Exception:
+        first_names, last_names = [], []
 
-    # Keep the pass counter visible after an error if we have both names
+    # Optional: keep the pass counter visible after an error
     name = None
     used_passes = None
     fn = safe_str(request.form.get("first_name"))
@@ -437,12 +440,13 @@ def render_index_error(error_msg: str, error_code: str, status: int = 400):
         try:
             used_passes = passes_this_quarter(fn, ln)
         except Exception:
-            used_passes = None  # never block the error page
+            used_passes = None
 
     return (
         render_template(
             "index.html",
-            error=error_msg,
+            error=error_msg,                 # headline
+            error_detail=error_detail,       # NEW: one clear helper line
             error_code=error_code,
             teachers=TEACHERS,
             reasons=REASONS,
@@ -571,11 +575,14 @@ def signout():
             currently_out = [p for p in passes_all if not safe_str(p.get('Time In'))]
             hall_limit = int(HALL_LIMIT)
             print(f"[capacity] out={len(currently_out)} limit={hall_limit}")
+           
             if len(currently_out) >= hall_limit:
                 return render_index_error(
-                    f"The hall is at capacity ({hall_limit} students out). Please wait until someone returns.",
-                    "capacity", 200
+                    f"The hall is at capacity ({hall_limit} students out).",  # short headline
+                    "capacity", 200,
+                    "All spots are currently taken. Please try again when someone returns."  # detail
                 )
+            
         except Exception as cap_e:
             print("capacity-guard error:", repr(cap_e))
             print("TRACEBACK:\n", traceback.format_exc())
@@ -605,17 +612,20 @@ def signout():
             print(f"[dup] student_has_open_pass('{first_name} {last_name}') -> {open_now}")
             if open_now:
                 return render_index_error(
-                    "You’re already signed out. Please sign back in before starting a new pass.",
-                    "already_out", 200
+                    "You’re already signed out.",        # short headline
+                    "already_out", 200,
+                    "Please sign back in before starting a new pass."  # detail
                 )
 
             just_sent = recent_signout_exists(first_name, last_name, window_seconds=20)
             print(f"[dup] recent_signout_exists('{first_name} {last_name}') -> {just_sent}")
             if just_sent:
                 return render_index_error(
-                    "We already received your sign-out. Please wait a few seconds.",
-                    "duplicate_click", 200
+                    "We already received your sign-out.",  # short headline
+                    "duplicate_click", 200,
+                    "Please wait a few seconds."           # detail
                 )
+            
         except Exception as dup_e:
             print("duplicate-guard error:", repr(dup_e))
             print("TRACEBACK:\n", traceback.format_exc())
