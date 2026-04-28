@@ -2,7 +2,7 @@ import os
 import json
 import gspread
 import csv
-from flask import Flask, render_template, request, redirect, session, url_for
+from flask import Flask, render_template, request, redirect, session, url_for, render_template_string
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 
@@ -815,6 +815,281 @@ def handle_500(e):
         "Something went wrong saving your pass. Please try again, or ask a teacher.",
         "write_failed", 500
     )
+
+@app.route("/promise")
+def promise():
+    student_id = request.args.get("id")
+
+    if not student_id:
+        return "Missing student ID"
+
+    ss = client.open_by_key("1JP4mscjAyY73ZEFlrStxaTJFzU7yz4fRtsiN1s4YO-0")
+
+    master_sheet = ss.worksheet("Master")
+    updates_sheet = ss.worksheet("All Updates")
+
+    data = master_sheet.get_all_records()
+    updates = updates_sheet.get_all_records()
+
+    student = None
+    for row in data:
+        if str(row.get("Student ID", "")).strip() == str(student_id).strip():
+            student = row
+            break
+
+    if not student:
+        return "Student not found"
+
+    # Determine overall status
+    statuses = [
+        str(student.get("Math", "")).strip(),
+        str(student.get("ELA", "")).strip(),
+        str(student.get("Science", "")).strip(),
+        str(student.get("SS", "")).strip(),
+        str(student.get("Electives", "")).strip(),
+        str(student.get("Support Services", "")).strip()
+    ]
+
+    statuses = [s.title() for s in statuses if s]
+
+    if "Lost" in statuses:
+        overall_status = "Not Eligible"
+    elif "Warning" in statuses:
+        overall_status = "Warning"
+    else:
+        overall_status = "Eligible"
+
+    student["Overall"] = overall_status
+
+    def get_comments(class_name):
+        comments = []
+        for row in updates:
+            row_id = str(row.get("Student ID", "")).strip()
+            row_class = str(row.get("Class", "")).strip()
+            row_status = str(row.get("Status", "")).strip()
+            row_comment = str(row.get("Comment", "")).strip()
+
+            if row_id != str(student_id).strip():
+                continue
+            if not row_comment:
+                continue
+            if row_status not in ["Warning", "Lost"]:
+                continue
+
+            if row_class == class_name:
+                comments.append(row_comment)
+            elif class_name == "Electives" and row_class in ["Band", "Choir", "FACS", "Art", "Wellness", "Orchestra", "Ag", "Strength"]:
+                comments.append(f"{row_class}: {row_comment}")
+            elif class_name == "Support Services" and row_class in ["SPED", "ELL", "Reading"]:
+                comments.append(f"{row_class}: {row_comment}")
+
+        return comments
+
+    student["Math Comments"] = get_comments("Math")
+    student["ELA Comments"] = get_comments("ELA")
+    student["Science Comments"] = get_comments("Science")
+    student["SS Comments"] = get_comments("SS")
+    student["Electives Comments"] = get_comments("Electives")
+    student["Support Services Comments"] = get_comments("Support Services")
+
+    return render_template_string("""
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      padding: 16px;
+    }
+
+    .card {
+      max-width: 520px;
+      margin: auto;
+      background: white;
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.15);
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .logo {
+      width: 70px;
+      height: auto;
+    }
+
+    .header-text {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .title {
+      text-align: center;
+      font-size: clamp(26px, 5vw, 36px);
+      font-weight: bold;
+      margin-bottom: 20px;
+    }
+
+    .logo {
+      display: block;
+      width: 60%;
+      max-width: 200px;
+      margin: 0 auto 8px;
+    }
+
+    .school {
+      text-align: center;
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #666;
+      margin: 4px 0 22px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 30px;
+      text-align: center;
+    }
+
+    .id {
+      color: #666;
+      margin: 6px 0 18px;
+      text-align: center;
+    }
+
+    .overall {
+      text-align: center;
+      font-size: 28px;
+      font-weight: bold;
+      padding: 18px;
+      border-radius: 14px;
+      margin: 20px 0 10px;
+    }
+
+    .overall-note {
+      text-align: center;
+      color: #666;
+      margin-bottom: 18px;
+    }
+
+    .Eligible { background: #d4edda; color: #155724; }
+    .Warning { background: #fff3cd; color: #856404; }
+    .NotEligible { background: #f8d7da; color: #721c24; }
+
+    .section-title {
+      font-size: 16px;
+      color: #666;
+      margin: 18px 0 4px;
+      font-weight: bold;
+    }
+
+    .row {
+      border-bottom: 1px solid #ddd;
+      padding: 12px 0;
+    }
+
+    .top-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 18px;
+    }
+
+    .status {
+      font-weight: bold;
+    }
+
+    .Good { color: #1b7f3a; }
+    .Lost { color: #b00020; }
+    .Warning { color: #b58900; }
+
+    .comment {
+      font-size: 14px;
+      color: #555;
+      margin-top: 6px;
+      padding-left: 8px;
+      line-height: 1.35;
+    }
+
+    .footer {
+      margin-top: 18px;
+      text-align: center;
+      font-size: 13px;
+      color: #777;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <img src="{{ url_for('static', filename='lincoln_logo.png') }}" alt="Logo" class="logo">
+
+    <div class="title">Promise Card Status</div>
+
+    <h1>{{ student['First Name'] }} {{ student['Last Name'] }}</h1>
+    <div class="id">Student ID: {{ student['Student ID'] }}</div>
+
+    <div class="overall {% if student['Overall'] == 'Not Eligible' %}NotEligible{% else %}{{ student['Overall'] }}{% endif %}">
+      Overall Status: {{ student['Overall'] }}
+    </div>
+
+    <div class="overall-note">See class details below</div>
+
+    <div class="section-title">Class Breakdown</div>
+
+    {% for class_name, status, comments in [
+      ('Math', student['Math'], student['Math Comments']),
+      ('ELA', student['ELA'], student['ELA Comments']),
+      ('Science', student['Science'], student['Science Comments']),
+      ('SS', student['SS'], student['SS Comments']),
+      ('Electives', student['Electives'], student['Electives Comments'])
+    ] %}
+      {% if status and status != '' %}
+        <div class="row">
+          <div class="top-line">
+            <span>{{ class_name }}</span>
+            <span class="status {{ status }}">{{ status }}</span>
+          </div>
+
+          {% for comment in comments %}
+            <div class="comment">• {{ comment }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endfor %}
+
+    {% if student['Support Services'] %}
+      <div class="row">
+        <div class="top-line">
+          <span>Support Services</span>
+          <span class="status {{ student['Support Services'] }}">{{ student['Support Services'] }}</span>
+        </div>
+
+        {% for comment in student['Support Services Comments'] %}
+          <div class="comment">• {{ comment }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="footer">
+      Promise Card status updates live from the school tracker.
+    </div>
+  </div>
+</body>
+</html>
+    """, student=student)
 
 if __name__ == '__main__':
     app.run(debug=True)
