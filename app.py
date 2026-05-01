@@ -852,22 +852,24 @@ def promise():
 
     statuses = [s.title() for s in statuses if s]
 
-    if "Lost" in statuses:
+    lost_count = statuses.count("Lost")
+
+    if lost_count >= 2:
         overall_status = "Not Eligible"
-    elif "Warning" in statuses:
-        overall_status = "Warning"
     else:
         overall_status = "Eligible"
 
     student["Overall"] = overall_status
-
+    
     def get_comments(class_name):
         comments = []
+
         for row in updates:
             row_id = str(row.get("Student ID", "")).strip()
             row_class = str(row.get("Class", "")).strip()
             row_status = str(row.get("Status", "")).strip()
             row_comment = str(row.get("Comment", "")).strip()
+            row_teacher = str(row.get("Teacher", "")).strip()
 
             if row_id != str(student_id).strip():
                 continue
@@ -876,12 +878,14 @@ def promise():
             if row_status not in ["Warning", "Lost"]:
                 continue
 
+            comment_text = f"{row_teacher}: {row_comment}" if row_teacher else row_comment
+
             if row_class == class_name:
-                comments.append(row_comment)
+                comments.append(comment_text)
             elif class_name == "Electives" and row_class in ["Band", "Choir", "FACS", "Art", "Wellness", "Orchestra", "Ag", "Strength"]:
-                comments.append(f"{row_class}: {row_comment}")
+                comments.append(f"{row_class}: {comment_text}")
             elif class_name == "Support Services" and row_class in ["SPED", "ELL", "Reading"]:
-                comments.append(f"{row_class}: {row_comment}")
+                comments.append(f"{row_class}: {comment_text}")
 
         return comments
 
@@ -892,196 +896,139 @@ def promise():
     student["Electives Comments"] = get_comments("Electives")
     student["Support Services Comments"] = get_comments("Support Services")
 
+    current_date = datetime.now().strftime("%B %d, %Y")
+
     return render_template_string("""
 <!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f4f4f4;
+    body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 16px; }
+    .card { max-width: 760px; margin: 20px auto; background: white; border-radius: 18px; padding: 28px; box-shadow: 0 4px 14px rgba(0,0,0,.15); }
+    .logo { display: block; width: 55%; max-width: 210px; margin: 0 auto 6px; }
+    .title { text-align: center; font-size: 32px; font-weight: bold; margin-bottom: 16px; }
+    h1 { text-align: center; margin: 0; font-size: 38px; font-weight: 800; line-height: 1.1; }
+    .id, .date { text-align: center; color: #666; margin-top: 6px; }
+    .date { color: #888; font-size: 14px; margin-bottom: 12px; }
+
+    .overall { text-align: center; font-size: 28px; font-weight: bold; padding: 18px; border-radius: 14px; margin: 20px 0 10px; }
+    .Eligible { background: #d4edda; color: #155724; }
+    .NotEligible { background: #f8d7da; color: #721c24; }
+    .overall-note { text-align: center; color: #666; margin-bottom: 22px; }
+    .section-title { font-size: 18px; color: #666; font-weight: bold; margin: 18px 0 6px; }
+
+    .class-row {
+      display: grid;
+      grid-template-columns: 70px 170px 1fr 130px;
+      align-items: center;
+      gap: 14px;
+      margin: 12px 0;
       padding: 16px;
+      border-radius: 14px;
+      border: 1px solid #ddd;
     }
 
-    .card {
-      max-width: 520px;
-      margin: auto;
-      background: white;
-      border-radius: 18px;
-      padding: 24px;
-      box-shadow: 0 4px 14px rgba(0,0,0,.15);
-    }
+    .class-row.Good { background: #f2fbf3; border-color: #cfe8d2; }
+    .class-row.Warning { background: #fff8e1; border-color: #f3d98b; }
+    .class-row.Lost { background: #fdeaea; border-color: #f3b8b8; }
 
-    .header {
+    .class-icon {
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
       display: flex;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 18px;
-    }
-
-    .logo {
-      width: 70px;
-      height: auto;
-    }
-
-    .header-text {
-      display: flex;
-      flex-direction: column;
       justify-content: center;
-    }
-
-    .title {
-      text-align: center;
-      font-size: clamp(26px, 5vw, 36px);
-      font-weight: bold;
-      margin-bottom: 20px;
-    }
-
-    .logo {
-      display: block;
-      width: 60%;
-      max-width: 200px;
-      margin: 0 auto 8px;
-    }
-
-    .school {
-      text-align: center;
-      font-size: 24px;
-      font-weight: bold;
-    }
-
-    .subtitle {
-      text-align: center;
-      color: #666;
-      margin: 4px 0 22px;
-    }
-
-    h1 {
-      margin: 0;
-      font-size: 30px;
-      text-align: center;
-    }
-
-    .id {
-      color: #666;
-      margin: 6px 0 18px;
-      text-align: center;
-    }
-
-    .overall {
-      text-align: center;
       font-size: 28px;
-      font-weight: bold;
-      padding: 18px;
-      border-radius: 14px;
-      margin: 20px 0 10px;
     }
 
-    .overall-note {
-      text-align: center;
-      color: #666;
-      margin-bottom: 18px;
-    }
+    .class-row.Good .class-icon { background: #dff3e2; }
+    .class-row.Warning .class-icon { background: #fff0b8; }
+    .class-row.Lost .class-icon { background: #f8cccc; }
 
-    .Eligible { background: #d4edda; color: #155724; }
-    .Warning { background: #fff3cd; color: #856404; }
-    .NotEligible { background: #f8d7da; color: #721c24; }
-
-    .section-title {
-      font-size: 16px;
-      color: #666;
-      margin: 18px 0 4px;
-      font-weight: bold;
-    }
-
-    .row {
-      border-bottom: 1px solid #ddd;
-      padding: 12px 0;
-    }
-
-    .top-line {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      font-size: 18px;
-    }
+    .class-name { font-size: 24px; font-weight: 800; }
+    .comment-box { border-left: 3px solid #ddd; padding-left: 12px; font-size: 15px; color: #333; }
+    .comment-teacher { font-weight: 700; margin-bottom: 3px; }
 
     .status {
-      font-weight: bold;
-    }
-
-    .Good { color: #1b7f3a; }
-    .Lost { color: #b00020; }
-    .Warning { color: #b58900; }
-
-    .comment {
-      font-size: 14px;
-      color: #555;
-      margin-top: 6px;
-      padding-left: 8px;
-      line-height: 1.35;
-    }
-
-    .footer {
-      margin-top: 18px;
+      display: inline-block;
+      width: 120px;
       text-align: center;
-      font-size: 13px;
-      color: #777;
+      padding: 10px 8px;
+      border-radius: 10px;
+      color: white;
+      font-weight: 900;
+      font-size: 16px;
     }
+
+    .status.Good { background: #2f9e44; }
+    .status.Warning { background: #d99a00; }
+    .status.Lost { background: #c1121f; }
+
+    .footer { margin-top: 20px; text-align: center; font-size: 13px; color: #777; }
   </style>
 </head>
 
 <body>
   <div class="card">
-    <img src="{{ url_for('static', filename='lincoln_logo.png') }}" alt="Logo" class="logo">
+    <img src="{{ url_for('static', filename='lincoln_logo.png') }}" alt="Lincoln Junior High Logo" class="logo">
 
     <div class="title">Promise Card Status</div>
 
     <h1>{{ student['First Name'] }} {{ student['Last Name'] }}</h1>
     <div class="id">Student ID: {{ student['Student ID'] }}</div>
+    <div class="date">{{ current_date }}</div>
 
-    <div class="overall {% if student['Overall'] == 'Not Eligible' %}NotEligible{% else %}{{ student['Overall'] }}{% endif %}">
-      Overall Status: {{ student['Overall'] }}
+    <div class="overall {{ 'Eligible' if student['Overall'] == 'Eligible' else 'NotEligible' }}">
+      {{ '✅ ELIGIBLE' if student['Overall'] == 'Eligible' else '❌ NOT ELIGIBLE' }}
     </div>
 
-    <div class="overall-note">See class details below</div>
+    <div class="overall-note">
+      {{ "You’re good to go! Keep up the great work." if student['Overall'] == 'Eligible' else "See class details below." }}
+    </div>
 
     <div class="section-title">Class Breakdown</div>
+
+    {% set icons = {
+      'Math': '🧮',
+      'ELA': '📖',
+      'Science': '⚗️',
+      'SS': '🌎',
+      'Electives': '🎨',
+      'Support Services': '🤝'
+    } %}
 
     {% for class_name, status, comments in [
       ('Math', student['Math'], student['Math Comments']),
       ('ELA', student['ELA'], student['ELA Comments']),
       ('Science', student['Science'], student['Science Comments']),
       ('SS', student['SS'], student['SS Comments']),
-      ('Electives', student['Electives'], student['Electives Comments'])
+      ('Electives', student['Electives'], student['Electives Comments']),
+      ('Support Services', student['Support Services'], student['Support Services Comments'])
     ] %}
-      {% if status and status != '' %}
-        <div class="row">
-          <div class="top-line">
-            <span>{{ class_name }}</span>
-            <span class="status {{ status }}">{{ status }}</span>
+      {% if status %}
+        <div class="class-row {{ status }}">
+          <div class="class-icon">{{ icons[class_name] }}</div>
+          <div class="class-name">{{ class_name }}</div>
+
+          <div class="comment-box">
+            {% for comment in comments %}
+              {% if ':' in comment %}
+                <div class="comment-teacher">{{ comment.split(':')[0] }}</div>
+                <div>{{ comment.split(':', 1)[1] }}</div>
+              {% else %}
+                <div>{{ comment }}</div>
+              {% endif %}
+            {% endfor %}
           </div>
 
-          {% for comment in comments %}
-            <div class="comment">• {{ comment }}</div>
-          {% endfor %}
+          <div>
+            <span class="status {{ status }}">{{ status|upper }}</span>
+          </div>
         </div>
       {% endif %}
     {% endfor %}
-
-    {% if student['Support Services'] %}
-      <div class="row">
-        <div class="top-line">
-          <span>Support Services</span>
-          <span class="status {{ student['Support Services'] }}">{{ student['Support Services'] }}</span>
-        </div>
-
-        {% for comment in student['Support Services Comments'] %}
-          <div class="comment">• {{ comment }}</div>
-        {% endfor %}
-      </div>
-    {% endif %}
 
     <div class="footer">
       Promise Card status updates live from the school tracker.
@@ -1089,7 +1036,7 @@ def promise():
   </div>
 </body>
 </html>
-    """, student=student)
-
+    """, student=student, current_date=current_date)
+    
 if __name__ == '__main__':
     app.run(debug=True)
