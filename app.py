@@ -2417,7 +2417,9 @@ def rate_evidence():
 @app.route("/award_lincoln", methods=["POST"])
 def award_lincoln():
 
-    student_id = request.form.get("student_id", "").strip()
+    student_id = normalize_pin(
+        request.form.get("student_id", "")
+    )
     reason = request.form.get("reason", "").strip()
     awarding_staff = request.form.get(
         "awarding_staff",
@@ -2463,8 +2465,10 @@ def award_lincoln():
 
     student = next(
         (
-            row for row in student_rows
-            if str(row.get("Student ID", "")).strip() == student_id
+            row
+            for row in student_rows
+            if normalize_pin(row.get("Student ID", ""))
+            == student_id
         ),
         None
     )
