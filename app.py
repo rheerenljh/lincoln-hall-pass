@@ -320,7 +320,7 @@ def check_student_pin(first: str, last: str, pin: str) -> bool:
 TEACHERS = [
     "R. Ahlrich", "B. Ames", "D. Andrews", "M. Berg", "J. Bird", "J. Breden", "B. Brennan", "T. Brennan",
     "C. Caine", "H. Carbaugh-Keefe", "L. Carroll", "C. Carver", "A. De Lucenay",
-    "D. Derifield", "J. Dreibelbis", "B. Garrity", "S. Garrity", "N. Hart", "R. Heeren", "S. Houston",
+    "D. Derifield", "J. Dreibelbis", "B. Garrity", "S. Garrity", "N. Hart", "R. Heeren", "S. Henneberger", "S. Houston",
     "S. Hovermale", "A. Howell", "C. Hughes", "J. Hyden", "J. Jimenez", "J. Kallenberg", "B. Langowski", "B. Marquardt", "A. Oliver", "A. Schmeltz",
     "P. Skirvin", "A. Smith", "B. Stiles", "G. Stout", "S. Taylor", "S. Vanlue", "M. Vinson"
 ]
