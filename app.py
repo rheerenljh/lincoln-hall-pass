@@ -2461,7 +2461,10 @@ def award_lincoln():
     lincoln_sheet = ss.worksheet("Lincoln Awards")
 
     master_sheet = ss.worksheet("Master")
-    student_rows = master_sheet.get_all_records()
+    
+    student_rows = master_sheet.get_all_records(
+    numericise_ignore=["all"]
+    )
 
     student = next(
         (
