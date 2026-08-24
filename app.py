@@ -1,4 +1,5 @@
 import os
+import time
 import json
 import gspread
 import csv
@@ -199,17 +200,32 @@ PASS_HEADERS = [
     "Time In"
 ]
 
+_pass_spreadsheet = None
+_pass_sheet_cache = {}
+
+
+def get_pass_spreadsheet():
+    global _pass_spreadsheet
+
+    if _pass_spreadsheet is None:
+        _pass_spreadsheet = client.open(SHEET_NAME)
+
+    return _pass_spreadsheet
+
 
 def _get_or_create_pass_sheet():
     """
-    Open the worksheet for the current school-year quarter.
+    Open and reuse the worksheet for the current school-year quarter.
 
-    Examples:
-    2026-2027 Q1
-    2026-2027 Q2
+    If the worksheet does not exist yet, create it and
+    add the Hall Pass headers once.
     """
     worksheet_name = get_quarter_pass_sheet_name()
-    spreadsheet = client.open(SHEET_NAME)
+
+    if worksheet_name in _pass_sheet_cache:
+        return _pass_sheet_cache[worksheet_name]
+
+    spreadsheet = get_pass_spreadsheet()
 
     try:
         worksheet = spreadsheet.worksheet(
@@ -225,23 +241,7 @@ def _get_or_create_pass_sheet():
 
         worksheet.append_row(PASS_HEADERS)
 
-        return worksheet
-
-    current_headers = worksheet.row_values(1)
-
-    normalized_headers = [
-        str(header).strip()
-        for header in current_headers
-    ]
-
-    if normalized_headers != PASS_HEADERS:
-        if not current_headers:
-            worksheet.append_row(PASS_HEADERS)
-        else:
-            worksheet.update(
-                "1:1",
-                [PASS_HEADERS]
-            )
+    _pass_sheet_cache[worksheet_name] = worksheet
 
     return worksheet
 
@@ -377,17 +377,38 @@ def recent_signout_exists(first: str, last: str, window_seconds: int = 20) -> bo
         # Fail safe (assume not recent to avoid blocking)
         return False
 
-def read_passes():
+_pass_records_cache = {
+    "data": None,
+    "expires_at": 0
+}
+
+def clear_pass_cache():
+    _pass_records_cache["data"] = None
+    _pass_records_cache["expires_at"] = 0
+
+def read_passes(cache_seconds=5):
+    now = time.time()
+
+    if (
+        _pass_records_cache["data"] is not None
+        and now < _pass_records_cache["expires_at"]
+    ):
+        return _pass_records_cache["data"]
+
     current_sheet = _get_or_create_pass_sheet()
 
     records = current_sheet.get_all_records()
 
-    return [
+    cleaned_records = [
         row
         for row in records
         if any(row.values())
     ]
 
+    _pass_records_cache["data"] = cleaned_records
+    _pass_records_cache["expires_at"] = now + cache_seconds
+
+    return cleaned_records
 
 def write_pass(entry):
     current_sheet = _get_or_create_pass_sheet()
@@ -401,6 +422,8 @@ def write_pass(entry):
         entry["Time Out"],
         entry["Time In"]
     ])
+
+    clear_pass_cache()
 
 def get_current_quarter():
     name, _, _ = _active_quarter_dt()
@@ -759,7 +782,7 @@ def signin():
     current_sheet = _get_or_create_pass_sheet()
 
     records = current_sheet.get_all_records()
-    headers = current_sheet.row_values(1)
+    headers = PASS_HEADERS
 
     try:
         time_in_col = headers.index("Time In") + 1
@@ -797,6 +820,8 @@ def signin():
                 time_in_col,
                 now_str()
             )
+
+            clear_pass_cache()
 
             used_passes = passes_this_quarter(
                 first_name,
